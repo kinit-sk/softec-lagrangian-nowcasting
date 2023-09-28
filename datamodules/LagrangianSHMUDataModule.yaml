@@ -1,0 +1,3 @@
+train_batch_size: 8
+valid_batch_size: 8
+test_batch_size: 8
