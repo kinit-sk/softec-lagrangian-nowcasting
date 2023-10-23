@@ -1,0 +1,67 @@
+# configurations for MFUNET model
+
+# Parameters for training model
+train_params:
+  device: cpu
+  #device: cpu
+  train_batch_size: 8
+  valid_batch_size: 8
+  test_batch_size: 8
+  predict_batch_size: 8
+  max_epochs: 100
+  #max_epochs: 1
+  # Max time used for training (days:hours:mins:secs)
+  #max_time: "00:72:00:00"
+  max_time: "00:03:30:00"
+  # Validate after every n batches
+  val_check_interval: 1.0
+  num_workers: 0
+  gpus: 1
+  savefile: "mfunet-new-repo-01"
+  # many leadtimes
+  verif_leadtimes: 6
+  # number of batches to validate on
+  val_batches: 5000000
+  # number of baches to train on (per epoch)
+  train_batches: 5000000
+  early_stopping:
+    monitor: "val_loss"
+    patience: 5
+  lr_scheduler:
+    name: "reduce_lr_on_plateau"
+    kwargs:
+      mode: "min"
+      factor: 0.1
+      patience: 5
+
+model:
+  lr: 1e-04
+  rainnet:
+    input_shape: [6, 336, 336]
+    kernel_size: 3
+    mode: "motion_field"
+    conv_shape:
+      [
+        ["1", [6, 64]],
+        ["2", [64, 128]],
+        ["3", [128, 256]],
+        ["4", [256, 512]],
+        ["5", [512, 1024]],
+        ["6", [1536, 512]],
+        ["7", [768, 256]],
+        ["8", [384, 128]],
+        ["9", [192, 64]],
+      ]
+
+  loss:
+    name: "rmse"
+    kwargs:
+      alpha: 0.5
+    discount_rate: 0.0
+  train_leadtimes: 6
+  apply_differencing: true
+  # added by MV - only referenced in LCNN.py file when we want to use data without bboxing
+  apply_bbox: false
+  display: 250
+prediction:
+  predict_leadtimes: 6
