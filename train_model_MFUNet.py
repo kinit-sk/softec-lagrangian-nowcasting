@@ -21,8 +21,6 @@ from pytorch_lightning.profilers import PyTorchProfiler
 
 from datamodules import SHMUDataModule
 
-from datasets import SHMUDataset
-
 from models import MFUNET
 
 
@@ -35,6 +33,8 @@ def main(configpath, checkpoint=None):
     torch.manual_seed(1)
     random.seed(1)
     np.random.seed(1)
+
+    torch.set_float32_matmul_precision('high')
 
     setup_logging(outputconf.logging)
 

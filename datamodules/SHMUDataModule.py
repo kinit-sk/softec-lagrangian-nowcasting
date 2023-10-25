@@ -32,7 +32,7 @@ class SHMUDataModule(pl.LightningDataModule):
             )
         if stage == "predict":
             self.predict_dataset = SHMUDataset(
-                split=self.predict_list, predicting=True, **self.dsconfig.SHMUDataset
+                split=self.predict_list, **self.dsconfig.SHMUDataset
             )
 
     def train_dataloader(self):

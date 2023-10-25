@@ -52,8 +52,7 @@ class RainNet(nn.Module):
                 nn.Sigmoid())
         elif self.mode == "motion_field":
             self.last_layer = nn.Sequential(
-                nn.Conv2d(2, 2, kernel_size=1, padding = 'same'),
-                nn.Sigmoid())
+                nn.Conv2d(2, 2, kernel_size=1, padding = 'same'))
         else:
             raise NotImplementedError()
             

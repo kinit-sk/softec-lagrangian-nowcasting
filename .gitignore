@@ -9,3 +9,7 @@
 **/hparams.yaml
 **/logs/**/*
 **/softec-lagrangian-nowcast-env/**
+/checkpoints
+/outputs
+*.ckpt
+*.out

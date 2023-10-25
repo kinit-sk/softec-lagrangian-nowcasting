@@ -177,6 +177,19 @@ class MFUNET(pl.LightningModule):
             return y_seq, total_loss
         else:
             return y_seq
+    
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        # Get data
+        x, y, idx = batch
+
+        # Perform prediction with LCNN model
+        x_ = x.clone()
+        y_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
+
+        del x
+        return y_seq
+
+
 
 
 class RMSELoss(nn.Module):

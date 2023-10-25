@@ -128,6 +128,8 @@ class SHMUDataset(Dataset):
                 self.filtered_windows.append(self.window)
         self.windows = np.array(self.filtered_windows)
 
+        self.common_time_index = self.num_frames_input - 1
+
     def __len__(self):
         """Mandatory property for Dataset."""
         return self.windows.shape[0]
@@ -215,8 +217,21 @@ class SHMUDataset(Dataset):
         """Transform from grayscale to dBZ (the 0-1 range)."""
         return data * (self.max_val - self.min_val) + self.min_val
 
+    # def get_window(self, index):
+    #     return self.windows[index, ...]
+    
     def get_window(self, index):
-        return self.windows[index, ...]
+        """Utility function to get window."""
+        if isinstance(index, int):
+            return self.windows[index]
+        elif index.numel() == 1:
+            return self.windows[index.item()]
+        else:
+            return self.windows[index]
+
+    def get_common_time(self, index):
+        window = self.get_window(index)
+        return window[self.common_time_index]
 
 
 def read_h5_composite(filename):
