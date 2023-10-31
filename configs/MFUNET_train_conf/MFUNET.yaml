@@ -16,7 +16,7 @@ train_params:
   val_check_interval: 1.0
   num_workers: 2
   gpus: 1
-  savefile: "mfunet-new-repo-01"
+  savefile: "mfunet-grayscale-01"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on
@@ -30,8 +30,8 @@ train_params:
     name: "reduce_lr_on_plateau"
     kwargs:
       mode: "min"
-      factor: 0.1
-      patience: 5
+      factor: 0.5
+      patience: 0
 
 model:
   lr: 1e-04
@@ -66,7 +66,7 @@ prediction:
   predict_leadtimes: 6
 prediction_output:
   # Output directory
-  output_dir: /data/softec-lagrangian-nowcasting/outputs/mfunet-new-repo-01/epoch_7/
+  output_dir: /data/softec-lagrangian-nowcasting/outputs/mfunet-grayscale-01/epoch_19/
   # Output filename format (can contain {common_time} to change time)
   filename: mfunet_rmse.h5
   # where to save predictions in the HDF5 file

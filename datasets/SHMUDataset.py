@@ -216,6 +216,12 @@ class SHMUDataset(Dataset):
     def from_grayscale(self, data):
         """Transform from grayscale to dBZ (the 0-1 range)."""
         return data * (self.max_val - self.min_val) + self.min_val
+    
+    def postprocessing(self, data):
+        """Transform model outputs to the expected form."""
+        if self.transform_to_grayscale:
+            data = self.from_grayscale(data)
+        return data
 
     # def get_window(self, index):
     #     return self.windows[index, ...]

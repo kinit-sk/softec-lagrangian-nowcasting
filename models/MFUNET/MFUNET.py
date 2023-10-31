@@ -186,6 +186,10 @@ class MFUNET(pl.LightningModule):
         x_ = x.clone()
         y_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
 
+        y_seq = self.trainer.datamodule.predict_dataset.postprocessing(
+            y_seq
+        )
+
         del x
         return y_seq
 
