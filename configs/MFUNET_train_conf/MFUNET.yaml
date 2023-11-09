@@ -16,16 +16,16 @@ train_params:
   val_check_interval: 1.0
   num_workers: 2
   gpus: 1
-  savefile: "mfunet-grayscale-01"
+  savefile: "mfunet-regularizedRMSE"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on
-  val_batches: 5000000
+  val_batches: 9999999
   # number of baches to train on (per epoch)
-  train_batches: 5000000
+  train_batches: 9999999
   early_stopping:
     monitor: "val_loss"
-    patience: 5
+    patience: 3
   lr_scheduler:
     name: "reduce_lr_on_plateau"
     kwargs:
@@ -53,24 +53,21 @@ model:
       ]
 
   loss:
-    name: "rmse"
+    name: "regularizedRMSE"
     kwargs:
-      alpha: 0.5
+      beta: 0.5
     discount_rate: 0.0
   train_leadtimes: 6
-  apply_differencing: true
-  # added by MV - only referenced in LCNN.py file when we want to use data without bboxing
-  apply_bbox: false
   display: 250
 prediction:
   predict_leadtimes: 6
 prediction_output:
   # Output directory
-  output_dir: /data/softec-lagrangian-nowcasting/outputs/mfunet-grayscale-01/epoch_19/
+  output_dir: /data/softec-lagrangian-nowcasting/outputs/mfunet-regularizedRMSE/
   # Output filename format (can contain {common_time} to change time)
-  filename: mfunet_rmse.h5
+  filename: mfunet-regularizedRMSE.h5
   # where to save predictions in the HDF5 file
-  group_format: "{common_time:%Y-%m-%d %H:%M:%S}/mfunet_rmse"
+  group_format: "{common_time:%Y-%m-%d %H:%M:%S}/mfunet-regularizedRMSE"
   # Attributes of the dataset in the HDF5 file
   what_attrs:
     quantity: DBZH

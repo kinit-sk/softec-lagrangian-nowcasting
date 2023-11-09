@@ -27,6 +27,8 @@ class MFUNET(pl.LightningModule):
 
         if config.model.loss.name == "rmse":
             self.criterion = RMSELoss()
+        elif config.model.loss.name == "regularizedRMSE":
+            self.criterion = ConservationLawRegularizationLoss(**config.model.loss.kwargs)
         else:
             raise NotImplementedError(f"Loss {config.model.loss.name} not implemented!")
 
@@ -65,15 +67,9 @@ class MFUNET(pl.LightningModule):
         self.lr_sch_params = config.train_params.lr_scheduler
         self.automatic_optimization = False
 
-        # Whether to apply differencing
-        self.apply_differencing = config.model.apply_differencing
-        
-        # Whether to apply bboxing
-        self.apply_bbox = config.model.apply_bbox
-
     def forward(self, x):
         mf = self.network(x)
-        return self._extrapolate(1, x[:,-1:], mf)
+        return self._extrapolate(1, x[:,-1:], mf), mf
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -89,16 +85,19 @@ class MFUNET(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         opt = self.optimizers()
-        y_hat, total_loss = self._iterative_prediction(batch=batch, stage="train")
+        y_hat, loss = self._iterative_prediction(batch=batch, stage="train")
         opt.step()
         opt.zero_grad()
-        self.log("train_loss", total_loss)
-        return {"prediction": y_hat, "loss": total_loss}
+        self.log("train_loss", loss["total_loss"])
+        if isinstance(self.criterion, ConservationLawRegularizationLoss):
+            self.log("train_crit_loss", loss["total_crit_loss"])
+            self.log("train_phys_loss", loss["total_phys_loss"])
+        return {"prediction": y_hat, "loss": loss["total_loss"]}
 
     def validation_step(self, batch, batch_idx):
-        y_hat, total_loss = self._iterative_prediction(batch=batch, stage="valid")
-        self.log("val_loss", total_loss)
-        return {"prediction": y_hat, "loss": total_loss}
+        y_hat, loss = self._iterative_prediction(batch=batch, stage="valid")
+        self.log("val_loss", loss["total_loss"])
+        return {"prediction": y_hat, "loss": loss["total_loss"]}
 
     def on_validation_epoch_end(self):
         torch.cuda.empty_cache()
@@ -107,9 +106,9 @@ class MFUNET(pl.LightningModule):
             sch.step(self.trainer.callback_metrics["val_loss"])
 
     def test_step(self, batch, batch_idx):
-        y_hat, total_loss = self._iterative_prediction(batch=batch, stage="test")
-        self.log("test_loss", total_loss)
-        return {"prediction": y_hat, "loss": total_loss}
+        y_hat, loss = self._iterative_prediction(batch=batch, stage="test")
+        self.log("test_loss", loss["total_loss"])
+        return {"prediction": y_hat, "loss": loss["total_loss"]}
     
     def _extrapolate(self, timesteps, precip, motion_field):
         velocity = motion_field / (motion_field.shape[-1] / 2)
@@ -158,12 +157,21 @@ class MFUNET(pl.LightningModule):
         )
         if calculate_loss:
             total_loss = 0
+            if isinstance(self.criterion, ConservationLawRegularizationLoss):
+                total_crit_loss = 0
+                total_phys_loss = 0
 
         for i in range(n_leadtimes):
-            y_hat = self(x)
+            y_hat, mf = self(x)
             if calculate_loss:
                 y_i = y[:, None, i, :, :].clone()
-                loss = self.criterion(y_hat, y_i) * loss_weights[i]
+                if isinstance(self.criterion, RMSELoss):
+                    loss = self.criterion(y_hat, y_i) * loss_weights[i]
+                elif isinstance(self.criterion, ConservationLawRegularizationLoss):
+                    loss, crit_loss, phys_loss = self.criterion(y_hat, y_i, mf, stage=stage)
+                    loss, crit_loss, phys_loss = map(lambda l: torch.mul(l, loss_weights[i]), (loss, crit_loss, phys_loss))
+                    total_crit_loss += crit_loss.detach()
+                    total_phys_loss += phys_loss.detach()
                 total_loss += loss.detach()
                 if stage == "train":
                     self.manual_backward(loss)
@@ -173,8 +181,10 @@ class MFUNET(pl.LightningModule):
                 x = torch.roll(x, -1, dims=1)
                 x[:, 3, :, :] = y_hat.detach().squeeze()
             del y_hat
-        if calculate_loss:
-            return y_seq, total_loss
+        if calculate_loss and isinstance(self.criterion, RMSELoss):
+            return y_seq, {"total_loss": total_loss}
+        elif calculate_loss and isinstance(self.criterion, ConservationLawRegularizationLoss):
+            return y_seq, {"total_loss": total_loss, "total_crit_loss": total_crit_loss, "total_phys_loss": total_phys_loss}
         else:
             return y_seq
     
@@ -213,3 +223,32 @@ class RMSELoss(nn.Module):
     def forward(self, yhat, y):
         """Forward pass."""
         return torch.sqrt(self.mse(yhat, y) + self.eps)
+
+import torchvision.transforms.functional as TF
+
+class ConservationLawRegularizationLoss(nn.Module):
+    def __init__(self, beta=0.5):
+        super(ConservationLawRegularizationLoss, self).__init__()
+        self.sobel_x = torch.tensor([[-1.,  0.,  1.],
+                                     [-2.,  0.,  2.],
+                                     [-1.,  0.,  1.]]).view(1, 1, 3, 3).repeat(1, 1, 1, 1)
+        self.sobel_y = torch.tensor([[-1., -2., -1.],
+                                     [ 0.,  0.,  0.],
+                                     [ 1.,  2.,  1.]]).view(1, 1, 3, 3).repeat(1, 1, 1, 1)
+        self.beta = beta
+        self.criterion = RMSELoss()
+
+    def forward(self, output, target, motion_field, stage):
+        criterion_loss = self.criterion(TF.center_crop(output, 336-48), TF.center_crop(target, 336-48))
+
+        device = output.device
+        
+        # physics-informed conservation of mass loss
+        diff_u = F.conv2d(motion_field[:,0:1], self.sobel_x.to(device))
+        diff_v = F.conv2d(motion_field[:,1:2], self.sobel_y.to(device))
+        physics_loss = torch.sum(torch.abs(diff_u + diff_v)) / (motion_field.shape[0] * motion_field.shape[2] * motion_field.shape[3])
+
+        if stage == "valid" or stage == "test":
+            return criterion_loss, criterion_loss, physics_loss
+
+        return (1 - self.beta) * criterion_loss + (self.beta) * physics_loss, criterion_loss, physics_loss
