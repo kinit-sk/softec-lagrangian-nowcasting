@@ -23,6 +23,9 @@ from datamodules import SHMUDataModule
 
 from models import MFUNET
 
+import wandb
+import os
+
 
 def main(configpath, checkpoint=None):
     confpath = Path("config") / configpath
@@ -56,6 +59,8 @@ def main(configpath, checkpoint=None):
     logger = WandbLogger(save_dir=f"checkpoints/{modelconf.train_params.savefile}/wandb", project=modelconf.train_params.savefile, log_model=True)
     profiler = PyTorchProfiler(profile_memory=False)
 
+    wandb.run.save(os.path.join(configpath, '*'), policy='now')
+
     trainer = pl.Trainer(
         profiler=profiler,
         logger=logger,
@@ -71,7 +76,7 @@ def main(configpath, checkpoint=None):
             lr_monitor,
             device_monitor,
         ],
-        log_every_n_steps=10,
+        log_every_n_steps=5,
     )
 
     trainer.fit(model=model, datamodule=datamodel, ckpt_path=checkpoint)

@@ -27,10 +27,14 @@ class MFUNET(pl.LightningModule):
 
         if config.model.loss.name == "rmse":
             self.criterion = RMSELoss()
-        elif config.model.loss.name == "regularizedRMSE":
-            self.criterion = ConservationLawRegularizationLoss(**config.model.loss.kwargs)
+        elif config.model.loss.name == "mse":
+            self.criterion = nn.MSELoss()
         else:
             raise NotImplementedError(f"Loss {config.model.loss.name} not implemented!")
+        
+        if config.model.loss.regularized == True:
+            self.criterion = ConservationLawRegularizationLoss(self.criterion, **config.model.loss.kwargs)
+        
 
         # on which leadtime to train the NN on?
         self.train_leadtimes = config.model.train_leadtimes
@@ -227,7 +231,7 @@ class RMSELoss(nn.Module):
 import torchvision.transforms.functional as TF
 
 class ConservationLawRegularizationLoss(nn.Module):
-    def __init__(self, beta=0.5):
+    def __init__(self, base_criterion, beta=0.5):
         super(ConservationLawRegularizationLoss, self).__init__()
         self.sobel_x = torch.tensor([[-1.,  0.,  1.],
                                      [-2.,  0.,  2.],
@@ -236,7 +240,7 @@ class ConservationLawRegularizationLoss(nn.Module):
                                      [ 0.,  0.,  0.],
                                      [ 1.,  2.,  1.]]).view(1, 1, 3, 3).repeat(1, 1, 1, 1)
         self.beta = beta
-        self.criterion = RMSELoss()
+        self.criterion = base_criterion
 
     def forward(self, output, target, motion_field, stage):
         criterion_loss = self.criterion(TF.center_crop(output, 336-48), TF.center_crop(target, 336-48))
