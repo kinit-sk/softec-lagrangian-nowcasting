@@ -11,5 +11,6 @@
 **/softec-lagrangian-nowcast-env/**
 /checkpoints
 /outputs
+/wandb
 *.ckpt
 *.out

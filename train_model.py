@@ -71,6 +71,7 @@ def main(configpath, checkpoint=None):
             lr_monitor,
             device_monitor,
         ],
+        log_every_n_steps=5,
     )
 
     trainer.fit(model=model, datamodule=datamodel, ckpt_path=checkpoint)

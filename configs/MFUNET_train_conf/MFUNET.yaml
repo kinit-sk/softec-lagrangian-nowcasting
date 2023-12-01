@@ -9,14 +9,13 @@ train_params:
   test_batch_size: 32
   predict_batch_size: 32
   max_epochs: 100
-  #max_epochs: 1
   # Max time used for training (days:hours:mins:secs)
   max_time: "00:48:00:00"
   # Validate after every n batches
   val_check_interval: 1.0
   num_workers: 2
   gpus: 1
-  savefile: "reg_MSE"
+  savefile: "reg_mse_fix"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on
@@ -56,17 +55,17 @@ model:
     name: "mse"
     regularized: True
     kwargs:
-      beta: 0.0
-    discount_rate: 2.0
+      beta: 0.01
+    discount_rate: 0.0
   train_leadtimes: 6
   display: 250
 prediction:
   predict_leadtimes: 6
 prediction_output:
   # Output directory
-  output_dir: /data/softec-lagrangian-nowcasting/outputs/reg_MSE_discounted/
+  output_dir: /data/softec-lagrangian-nowcasting/outputs/reg_mse_fix/
   # Output filename format (can contain {common_time} to change time)
-  filename: reg_MSE.h5
+  filename: reg_mse_fix_v3.h5
   # where to save predictions in the HDF5 file
   group_format: "{common_time:%Y-%m-%d %H:%M:%S}/model"
   # Attributes of the dataset in the HDF5 file

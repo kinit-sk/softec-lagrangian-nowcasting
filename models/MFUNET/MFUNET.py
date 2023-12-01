@@ -183,7 +183,7 @@ class MFUNET(pl.LightningModule):
             y_seq[:, i, :, :] = y_hat.detach().squeeze()
             if i != n_leadtimes - 1:
                 x = torch.roll(x, -1, dims=1)
-                x[:, 3, :, :] = y_hat.detach().squeeze()
+                x[:, -1, :, :] = y_hat.detach().squeeze()
             del y_hat
         if calculate_loss and isinstance(self.criterion, RMSELoss):
             return y_seq, {"total_loss": total_loss}

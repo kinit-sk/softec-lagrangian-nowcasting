@@ -296,7 +296,7 @@ class LagrangianSHMUDataset(Dataset):
         if scaled:
             data = self.invScaler(data)  # to mm/h
         data = 223 * data ** (1.53)  # to z
-        data = 10 * torch.log10(data)  # to dBZ
+        data = 10 * torch.log10(data + 1)  # to dBZ
 
         return data
 
