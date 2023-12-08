@@ -114,6 +114,7 @@ class LUMIN(pl.LightningModule):
         if isinstance(self.criterion, ConservationLawRegularizationLoss):
             self.log("train_crit_loss", loss["total_crit_loss"])
             self.log("train_phys_loss", loss["total_phys_loss"])
+            self.log("train_extra_crit_loss", loss["total_extra_crit_loss"])
         return {"prediction": y_hat, "loss": loss["total_loss"]}
 
     def validation_step(self, batch, batch_idx):
@@ -181,6 +182,7 @@ class LUMIN(pl.LightningModule):
             total_loss = 0
             if isinstance(self.criterion, ConservationLawRegularizationLoss):
                 total_crit_loss = 0
+                total_extra_crit_loss = 0
                 total_phys_loss = 0
 
         for i in range(n_leadtimes):
@@ -188,11 +190,12 @@ class LUMIN(pl.LightningModule):
             if calculate_loss:
                 y_i = y[:, None, i, :, :].clone()
                 if isinstance(self.criterion, RMSELoss):
-                    loss = self.criterion(y_hat, y_i) * loss_weights[i]
+                    loss = self.criterion(y_hat, y_i) * loss_weights[i] + self.criterion(y_hat, y_extra) * loss_weights[i]
                 elif isinstance(self.criterion, ConservationLawRegularizationLoss):
-                    loss, crit_loss, phys_loss = self.criterion(y_hat, y_i, mf, stage=stage)
-                    loss, crit_loss, phys_loss = map(lambda l: torch.mul(l, loss_weights[i]), (loss, crit_loss, phys_loss))
+                    loss, crit_loss, extra_crit_loss, phys_loss = self.criterion(y_hat, y_extra, y_i, mf, stage=stage)
+                    loss, crit_loss, extra_crit_loss, phys_loss = map(lambda l: torch.mul(l, loss_weights[i]), (loss, crit_loss, extra_crit_loss, phys_loss))
                     total_crit_loss += crit_loss.detach()
+                    total_extra_crit_loss += extra_crit_loss.detach()
                     total_phys_loss += phys_loss.detach()
                 total_loss += loss.detach()
                 if stage == "train":
@@ -206,7 +209,7 @@ class LUMIN(pl.LightningModule):
         if calculate_loss and isinstance(self.criterion, RMSELoss):
             return y_seq, {"total_loss": total_loss}
         elif calculate_loss and isinstance(self.criterion, ConservationLawRegularizationLoss):
-            return y_seq, {"total_loss": total_loss, "total_crit_loss": total_crit_loss, "total_phys_loss": total_phys_loss}
+            return y_seq, {"total_loss": total_loss, "total_crit_loss": total_crit_loss, "total_extra_crit_loss": total_extra_crit_loss, "total_phys_loss": total_phys_loss}
         else:
             return y_seq
     
@@ -249,7 +252,7 @@ class RMSELoss(nn.Module):
 import torchvision.transforms.functional as TF
 
 class ConservationLawRegularizationLoss(nn.Module):
-    def __init__(self, base_criterion, beta=0.5):
+    def __init__(self, base_criterion, beta=0.5, gamma=0.5):
         super(ConservationLawRegularizationLoss, self).__init__()
         self.sobel_x = torch.tensor([[-1.,  0.,  1.],
                                      [-2.,  0.,  2.],
@@ -258,12 +261,14 @@ class ConservationLawRegularizationLoss(nn.Module):
                                      [ 0.,  0.,  0.],
                                      [ 1.,  2.,  1.]]).view(1, 1, 3, 3).repeat(1, 1, 1, 1)
         self.beta = beta
+        self.gamma = gamma
         self.criterion = base_criterion
 
-    def forward(self, output, target, motion_field, stage):
-        criterion_loss = self.criterion(TF.center_crop(output, 336-48), TF.center_crop(target, 336-48))
+    def forward(self, target, extrapolated, final_output, motion_field, stage):
+        criterion_loss = self.criterion(TF.center_crop(final_output, 336-48), TF.center_crop(target, 336-48))
+        extra_criterion_loss = self.criterion(TF.center_crop(extrapolated, 336-48), TF.center_crop(target, 336-48))
 
-        device = output.device
+        device = final_output.device
         
         # physics-informed conservation of mass loss
         diff_u = F.conv2d(motion_field[:,0:1], self.sobel_x.to(device))
@@ -271,6 +276,6 @@ class ConservationLawRegularizationLoss(nn.Module):
         physics_loss = torch.sum(torch.abs(diff_u + diff_v)) / (motion_field.shape[0] * motion_field.shape[2] * motion_field.shape[3])
 
         if stage == "valid" or stage == "test":
-            return criterion_loss, criterion_loss, physics_loss
+            return criterion_loss, criterion_loss, extra_criterion_loss, physics_loss
 
-        return (1 - self.beta) * criterion_loss + (self.beta) * physics_loss, criterion_loss, physics_loss
+        return (1 - self.beta) * ((1 - self.gamma) * criterion_loss + (self.gamma) * extra_criterion_loss) + (self.beta) * physics_loss, criterion_loss, extra_criterion_loss, physics_loss

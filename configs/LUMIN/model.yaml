@@ -4,10 +4,10 @@
 train_params:
   device: cuda:0
   #device: cpu
-  train_batch_size: 4
-  valid_batch_size: 4
-  test_batch_size: 4
-  predict_batch_size: 4
+  train_batch_size: 12
+  valid_batch_size: 12
+  test_batch_size: 12
+  predict_batch_size: 12
   max_epochs: 100
   # Max time used for training (days:hours:mins:secs)
   max_time: "00:48:00:00"
@@ -15,7 +15,7 @@ train_params:
   val_check_interval: 1.0
   num_workers: 2
   gpus: 1
-  savefile: "LUMIN"
+  savefile: "LUMIN-frozen"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on
@@ -71,7 +71,8 @@ model:
     name: "mse"
     regularized: True
     kwargs:
-      beta: 0.01
+      beta: 0.0
+      gamma: 0.0
     discount_rate: 0.0
   train_leadtimes: 6
   display: 250
