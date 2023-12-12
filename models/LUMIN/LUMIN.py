@@ -118,7 +118,8 @@ class LUMIN(pl.LightningModule):
         return {"prediction": y_hat, "loss": loss["total_loss"]}
 
     def validation_step(self, batch, batch_idx):
-        y_hat, loss = self._iterative_prediction(batch=batch, stage="valid")
+        with torch.no_grad():
+            y_hat, loss = self._iterative_prediction(batch=batch, stage="valid")
         self.log("val_loss", loss["total_loss"])
         return {"prediction": y_hat, "loss": loss["total_loss"]}
 
@@ -129,7 +130,8 @@ class LUMIN(pl.LightningModule):
             sch.step(self.trainer.callback_metrics["val_loss"])
 
     def test_step(self, batch, batch_idx):
-        y_hat, loss = self._iterative_prediction(batch=batch, stage="test")
+        with torch.no_grad():
+            y_hat, loss = self._iterative_prediction(batch=batch, stage="test")
         self.log("test_loss", loss["total_loss"])
         return {"prediction": y_hat, "loss": loss["total_loss"]}
     

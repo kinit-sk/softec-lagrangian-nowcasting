@@ -27,6 +27,9 @@ def run(checkpointpath, configpath, predict_list) -> None:
 
     model = LUMIN(modelconf).load_from_checkpoint(checkpointpath, config=modelconf, map_location=torch.device('cpu'))
 
+    model.advf_network.eval()
+    model.mfunet_network.eval()
+
     output_writer = LagrangianHDF5Writer(**modelconf.prediction_output)
 
     logger = WandbLogger(save_dir=f"checkpoints/{modelconf.train_params.savefile}/wandb/predictions", project=modelconf.train_params.savefile, log_model=True)
