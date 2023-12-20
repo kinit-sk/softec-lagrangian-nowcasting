@@ -49,8 +49,8 @@ def main(configpath, checkpoint=None):
     model_mf = MFUNET(modelconf_mf).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/reg_mse_fix/sunny-bee-1-epoch=11-step=14148.ckpt", config=modelconf_mf)
     model = LUMIN(modelconf)
     model.mfunet_network.load_state_dict(model_mf.network.state_dict())
-    for param in model.mfunet_network.parameters():
-        param.requires_grad = False
+    # for param in model.mfunet_network.parameters():
+    #     param.requires_grad = False
     del model_mf
 
     # Callbacks
