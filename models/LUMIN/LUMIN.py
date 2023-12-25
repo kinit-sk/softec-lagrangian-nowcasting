@@ -279,5 +279,9 @@ class ConservationLawRegularizationLoss(nn.Module):
 
         if stage == "valid" or stage == "test":
             return criterion_loss, criterion_loss, extra_criterion_loss, physics_loss
+        
+        criterion_loss_weighted = (1 - self.beta) * (1 - self.gamma) * criterion_loss
+        extra_criterion_loss_weighted = (1 - self.beta) * (self.gamma) * extra_criterion_loss
+        physics_loss_weighted = (self.beta) * physics_loss
 
-        return (1 - self.beta) * ((1 - self.gamma) * criterion_loss + (self.gamma) * extra_criterion_loss) + (self.beta) * physics_loss, criterion_loss, extra_criterion_loss, physics_loss
+        return criterion_loss_weighted + extra_criterion_loss_weighted + physics_loss_weighted, criterion_loss_weighted, extra_criterion_loss_weighted, physics_loss_weighted
