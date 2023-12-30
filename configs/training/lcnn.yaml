@@ -15,7 +15,7 @@ train_params:
   val_check_interval: 1.0
   num_workers: 2
   gpus: 1
-  savefile: "lcnn-bugfix"
+  savefile: "lcnn-logcosh-diff"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on
@@ -52,9 +52,7 @@ model:
       ]
 
   loss:
-    name: "rmse"
-    kwargs:
-      alpha: 0.5
+    name: "logcosh"
     discount_rate: 0.0
   train_leadtimes: 6
   apply_differencing: true
@@ -74,9 +72,9 @@ prediction:
     allow_nonfinite_values: true
 prediction_output:
   # Output directory
-  output_dir: /data/outputs/lagrangian/lcnn-bugfix_v2
+  output_dir: /data/outputs/lagrangian/lcnn-log
   # Output filename format (can contain {common_time} to change time)
-  filename: lcnn-bugfix.h5
+  filename: lcnn-log.h5
   # where to save predictions in the HDF5 file
   group_format: "{common_time:%Y-%m-%d %H:%M:%S}/model"
   # Attributes of the dataset in the HDF5 file

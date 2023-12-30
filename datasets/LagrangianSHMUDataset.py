@@ -248,7 +248,7 @@ class LagrangianSHMUDataset(Dataset):
         if self.normalization == "log_unit":
             return (torch.log(data + 0.01) + 5) / 10
         if self.normalization == "log":
-            return torch.log(data + 0.01)
+            return torch.log(data + 1)
         if self.normalization == "none":
             return data
 
@@ -258,7 +258,7 @@ class LagrangianSHMUDataset(Dataset):
         if self.normalization == "log_unit":
             return torch.exp((data * 10) - 5) - 0.01
         if self.normalization == "log":
-            return torch.exp(data) - 0.01
+            return torch.exp(data) - 1
         if self.normalization == "none":
             return data
 
@@ -270,16 +270,15 @@ class LagrangianSHMUDataset(Dataset):
             data = 10 ** (data * 0.1)
             data = (data / 223) ** (1 / 1.53)  # fixed
 
+        if self.transform_to_grayscale:
+            # mm / h to log-transformed
+            data = self.scaler(data)
+
         first_field = None
         if self.apply_differencing:
             # Difference data
             first_field = data[0, ...].clone()
             data = torch.diff(data, dim=0)
-
-        if self.transform_to_grayscale:
-            # mm / h to log-transformed
-            data = self.scaler(data)
-            first_field = self.scaler(first_field)
 
         # Divide to input & output
         # Use output frame number, since that is constant whether we apply differencing or not

@@ -49,6 +49,8 @@ class LUMIN(pl.LightningModule):
         # How many leadtimes to predict
         self.predict_leadtimes = config.prediction.predict_leadtimes
 
+        self.apply_differencing = config.model.apply_differencing
+
         # 1.0 corresponds to harmonic loss weight decrease,
         # 0.0 to no decrease at all,
         # less than 1.0 is sub-harmonic,
@@ -78,16 +80,16 @@ class LUMIN(pl.LightningModule):
         self.lr_sch_params = config.train_params.lr_scheduler
         self.automatic_optimization = False
 
-    def forward(self, x):
+    def forward(self, x, x_diff):
         # Fist stage - Motion-Field U-Net
         mf = self.mfunet_network(x)
-        extrapolated = self._extrapolate(1, x[:,-1:], mf)
+        extrapolated = self._extrapolate(1, x_diff[:,-1:], mf)
 
         # Second stage - Advection-free U-Net
-        x_lagrangian = x.clone()
+        x_lagrangian = x_diff.clone()
 
-        for i in range(x.shape[1]):
-            x_lagrangian[:,i] = self._extrapolate(x.shape[1]-i, x_lagrangian[:,[i]], mf)[:,-1]
+        for i in range(x_diff.shape[1]):
+            x_lagrangian[:,i] = self._extrapolate(x_lagrangian.shape[1]-i, x_lagrangian[:,[i]], mf)[:,-1]
 
         result = self.advf_network(x_lagrangian)
 
@@ -174,8 +176,9 @@ class LUMIN(pl.LightningModule):
                 f"Stage {stage} is undefined. \n choices: 'train', 'valid', test', 'predict'"
             )
 
-        x, y, _ = batch
+        x, x_diff, y, _ = batch
         x = torch.squeeze(x, 2).float()
+        x_diff = torch.squeeze(x_diff, 2).float()
         y = torch.squeeze(y, 2).float()
         y_seq = torch.empty(
             (x.shape[0], n_leadtimes, *self.input_shape[1:]), device=self.device
@@ -188,7 +191,7 @@ class LUMIN(pl.LightningModule):
                 total_phys_loss = 0
 
         for i in range(n_leadtimes):
-            y_hat, y_extra, mf = self(x)
+            y_hat, y_extra, mf = self(x, x_diff)
             if calculate_loss:
                 y_i = y[:, None, i, :, :].clone()
                 if isinstance(self.criterion, RMSELoss):
@@ -223,8 +226,32 @@ class LUMIN(pl.LightningModule):
         x_ = x.clone()
         y_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
 
-        y_seq = self.trainer.datamodule.predict_dataset.postprocessing(
-            y_seq
+        # Transform from scaled to mm/hh
+        invScaler = self.trainer.datamodule.predict_dataset.invScaler
+        y_seq = invScaler(y_seq)
+        x = invScaler(x_)
+
+        # If we applied differencing, integrate back to full fields
+        if self.apply_differencing:
+            # This should be a dummy transform that has no effect (since scaling should be "none"),
+            # but keep to match what is done to predictions
+            first_x = invScaler(first_x)
+            # Integrate observation back to full fields
+            x[:, 0, :, :] = first_x + x[:, 0, :, :]
+            for i in range(1, x.shape[1]):
+                x[:, i, :, :] = x[:, i, :, :] + x[:, i - 1, :, :]
+            # First prediction with last observation
+            y_seq[:, 0, :, :] = y_seq[:, 0, :, :] + x[:, -1, :, :]
+            # Iterate through rest of predictions
+            for i in range(1, self.predict_leadtimes):
+                y_seq[:, i, :, :] = y_seq[:, i - 1, :, :] + y_seq[:, i, :, :]
+
+            # Set negative values (in mm/h) to 0
+            y_seq[y_seq < 0] = 0
+        
+        # Transform from mm/h to dBZ
+        output_fields = self.trainer.datamodule.predict_dataset.from_transformed(
+            output_fields, scaled=False
         )
 
         del x

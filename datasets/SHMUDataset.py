@@ -30,6 +30,9 @@ class SHMUDataset(Dataset):
         max_val=70.0,
         min_val=-16.948421478271484,
         transform_to_grayscale=True,
+        apply_differencing=False,
+        predicting=False,
+        normalization_method='none',
     ):
         """Initialize the dataset.
 
@@ -75,6 +78,8 @@ class SHMUDataset(Dataset):
             The maximum value to use when scaling the data between 0 and 1.
         min_val : float
             The minimum value to use when scaling the data between 0 and 1.
+        apply_differencing : bool
+            Whether to apply differencing to the data.
         """
         assert date_list is not None, "No date list for radar files provided!"
         assert path is not None, "No path to radar files provided!"
@@ -129,6 +134,19 @@ class SHMUDataset(Dataset):
         self.windows = np.array(self.filtered_windows)
 
         self.common_time_index = self.num_frames_input - 1
+
+        self.transform_to_grayscale = transform_to_grayscale
+        self.apply_differencing = apply_differencing
+
+        # If we're predicting now
+        self.predicting = predicting
+
+        if normalization_method not in ["log", "log_unit", "none", "log_unit_diff"]:
+            raise NotImplementedError(
+                f"data normalization method {normalization_method} not implemented"
+            )
+        else:
+            self.normalization = normalization_method
 
     def __len__(self):
         """Mandatory property for Dataset."""
@@ -194,20 +212,14 @@ class SHMUDataset(Dataset):
             data[i, ...] = im
 
         data = data[..., np.newaxis]
-        if self.transform_to_grayscale:
-            data = self.to_grayscale(data)
+        
+        inputs_orig, inputs_diff, outputs, first_field = self.postprocessing(data)
 
-        inputs = (
-            torch.from_numpy(data[: self.num_frames_input, ...])
-            .permute(0, 3, 1, 2)
-            .contiguous()
-        )
-        outputs = (
-            torch.from_numpy(data[self.num_frames_input :, ...])
-            .permute(0, 3, 1, 2)
-            .contiguous()
-        )
-        return inputs, outputs, idx
+        if self.apply_differencing and self.predicting:
+            # We want to return the first original field to allow transformation back to full fields
+            return inputs_orig, inputs_diff, outputs, idx, first_field
+
+        return inputs_orig, outputs, idx
 
     def to_grayscale(self, data):
         """Transform image from dBZ to grayscale (the 0-1 range)."""
@@ -216,12 +228,44 @@ class SHMUDataset(Dataset):
     def from_grayscale(self, data):
         """Transform from grayscale to dBZ (the 0-1 range)."""
         return data * (self.max_val - self.min_val) + self.min_val
-    
-    def postprocessing(self, data):
-        """Transform model outputs to the expected form."""
-        if self.transform_to_grayscale:
-            data = self.from_grayscale(data)
+
+    def from_transformed(self, data, scaled=True):
+        if scaled:
+            data = self.invScaler(data)  # to mm/h
+        data = 223 * data ** (1.53)  # to z
+        data = 10 * torch.log10(data + 1)  # to dBZ
+
         return data
+    
+    def postprocessing(self, data_in: np.ndarray):
+        data = torch.Tensor(data_in)
+        if self.transform_to_grayscale:
+            # data of shape (window_size, im.shape[0], im.shape[1])
+            # dbZ to mm/h
+            data = 10 ** (data * 0.1)
+            data = (data / 223) ** (1 / 1.53)  # fixed
+
+        if self.transform_to_grayscale:
+            # mm / h to log-transformed
+            data = self.scaler(data)
+
+        first_field = None
+        if self.apply_differencing:
+            # Difference data
+            first_field = data[0, ...].clone()
+            data_diff = torch.diff(data, dim=0)
+
+        # Divide to input & output
+        # Use output frame number, since that is constant whether we apply differencing or not
+        if self.num_frames_output == 0:
+            inputs = data
+            outputs = torch.empty((0, data.shape[1], data.shape[2]))
+        else:
+            inputs_orig = data[: -self.num_frames_output, ...].permute(0, 3, 1, 2).contiguous()
+            inputs_diff = data_diff[: -self.num_frames_output, ...].permute(0, 3, 1, 2).contiguous() if self.apply_differencing else None
+            outputs = data[-self.num_frames_output :, ...].permute(0, 3, 1, 2).contiguous()
+
+        return inputs_orig, inputs_diff, outputs, first_field
 
     # def get_window(self, index):
     #     return self.windows[index, ...]
@@ -238,6 +282,28 @@ class SHMUDataset(Dataset):
     def get_common_time(self, index):
         window = self.get_window(index)
         return window[self.common_time_index]
+    
+    def scaler(self, data: torch.Tensor):
+        if self.normalization == "log_unit_diff":
+            data[data > self.log_unit_diff_cutoff] = self.log_unit_diff_cutoff
+            data[data < -self.log_unit_diff_cutoff] = -self.log_unit_diff_cutoff
+            return (data / self.log_unit_diff_cutoff + 1) / 2
+        if self.normalization == "log_unit":
+            return (torch.log(data + 0.01) + 5) / 10
+        if self.normalization == "log":
+            return torch.log(data + 0.01)
+        if self.normalization == "none":
+            return data
+
+    def invScaler(self, data: torch.Tensor):
+        if self.normalization == "log_unit_diff":
+            return (data * 2 - 1) * self.log_unit_diff_cutoff
+        if self.normalization == "log_unit":
+            return torch.exp((data * 10) - 5) - 0.01
+        if self.normalization == "log":
+            return torch.exp(data) - 0.01
+        if self.normalization == "none":
+            return data
 
 
 def read_h5_composite(filename):

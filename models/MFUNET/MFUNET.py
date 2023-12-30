@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+import math
 
 from modelcomponents import RainNet as RN
 
@@ -29,6 +30,8 @@ class MFUNET(pl.LightningModule):
             self.criterion = RMSELoss()
         elif config.model.loss.name == "mse":
             self.criterion = nn.MSELoss()
+        elif config.model.loss.name == "logcosh":
+            self.criterion = LogCoshLoss()
         else:
             raise NotImplementedError(f"Loss {config.model.loss.name} not implemented!")
         
@@ -255,4 +258,22 @@ class ConservationLawRegularizationLoss(nn.Module):
         if stage == "valid" or stage == "test":
             return criterion_loss, criterion_loss, physics_loss
 
-        return (1 - self.beta) * criterion_loss + (self.beta) * physics_loss, criterion_loss, physics_loss
+        return (1 - self.beta) * criterion_loss + (self.beta) * physics_loss, (1 - self.beta) * criterion_loss, (self.beta) * physics_loss
+    
+    
+def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+    
+    def _log_cosh(x: torch.Tensor) -> torch.Tensor:
+        return x + nn.functional.softplus(-2. * x) - math.log(2.0)
+    
+    return torch.mean(_log_cosh(y_pred - y_true))
+
+class LogCoshLoss(nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+
+    def forward(
+        self, y_pred: torch.Tensor, y_true: torch.Tensor
+    ) -> torch.Tensor:
+        return log_cosh_loss(y_pred, y_true)

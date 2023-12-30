@@ -31,7 +31,7 @@ def main(configpath, checkpoint=None):
     confpath = Path("config") / configpath
     dsconf = load_config(confpath / "datasets.yaml")
     outputconf = load_config(confpath / "output.yaml")
-    modelconf = load_config(confpath / "MFUNET.yaml")
+    modelconf = load_config(confpath / "model.yaml")
 
     torch.manual_seed(1)
     random.seed(1)

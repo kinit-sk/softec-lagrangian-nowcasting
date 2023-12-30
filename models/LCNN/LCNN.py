@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 from scipy.ndimage import uniform_filter
+import math
 
 from modelcomponents import RainNet as RN
 from utils import (
@@ -31,6 +32,8 @@ class LCNN(pl.LightningModule):
 
         if config.model.loss.name == "rmse":
             self.criterion = RMSELoss()
+        elif config.model.loss.name == "logcosh":
+            self.criterion = LogCoshLoss()
         else:
             raise NotImplementedError(f"Loss {config.model.loss.name} not implemented!")
 
@@ -297,3 +300,21 @@ class RMSELoss(nn.Module):
     def forward(self, yhat, y):
         """Forward pass."""
         return torch.sqrt(self.mse(yhat, y) + self.eps)
+
+
+def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+    
+    def _log_cosh(x: torch.Tensor) -> torch.Tensor:
+        return x + nn.functional.softplus(-2. * x) - math.log(2.0)
+    
+    return torch.mean(_log_cosh(y_pred - y_true))
+
+class LogCoshLoss(nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+
+    def forward(
+        self, y_pred: torch.Tensor, y_true: torch.Tensor
+    ) -> torch.Tensor:
+        return log_cosh_loss(y_pred, y_true)

@@ -33,6 +33,6 @@ SHMUDataset:
   # Note that if true, input block length is reduced by 1
   apply_differencing: True
   # data normalization method, options: log, log_unit, none
-  normalization_method: none
+  normalization_method: log
   # Cut-off value for differenced mm/h values before transforming to [0,1] interval
   log_unit_diff_cutoff: 250
