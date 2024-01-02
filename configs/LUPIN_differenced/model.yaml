@@ -13,9 +13,9 @@ train_params:
   max_time: "00:48:00:00"
   # Validate after every n batches
   val_check_interval: 1.0
-  num_workers: 2
+  num_workers: 0
   gpus: 1
-  savefile: "LUMIN-differenced"
+  savefile: "LUMIN-differenced-pretrainedMFUNET"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on
@@ -52,12 +52,12 @@ model:
         ["9", [192, 64]],
       ]
   advfunet:
-    input_shape: [6, 336, 336]
+    input_shape: [5, 336, 336]
     kernel_size: 3
     mode: "regression"
     conv_shape:
       [
-        ["1", [6, 64]],
+        ["1", [5, 64]],
         ["2", [64, 128]],
         ["3", [128, 256]],
         ["4", [256, 512]],
@@ -69,11 +69,11 @@ model:
       ]
 
   loss:
-    name: "mse"
+    name: "logcosh"
     regularized: True
     kwargs:
-      beta: 0.01
-      gamma: 0.1
+      beta: 0.0
+      gamma: 0.0
     discount_rate: 0.0
   train_leadtimes: 6
   display: 250
@@ -81,9 +81,9 @@ prediction:
   predict_leadtimes: 6
 prediction_output:
   # Output directory
-  output_dir: /data/softec-lagrangian-nowcasting/outputs/LUMIN/
+  output_dir: /data/softec-lagrangian-nowcasting/outputs/LUPIN-diff-pretrain/
   # Output filename format (can contain {common_time} to change time)
-  filename: LUMIN-frozen.h5
+  filename: LUPIN-diff-pretrain.h5
   # where to save predictions in the HDF5 file
   group_format: "{common_time:%Y-%m-%d %H:%M:%S}/model"
   # Attributes of the dataset in the HDF5 file

@@ -34,7 +34,7 @@ def main(configpath, checkpoint=None):
     outputconf = load_config(confpath / "output.yaml")
     modelconf = load_config(confpath / "model.yaml")
 
-    modelconf_mf = load_config("/data/softec-lagrangian-nowcasting/configs/MFUNET_train_conf/MFUNET.yaml")
+    modelconf_mf = load_config("/data/softec-lagrangian-nowcasting/configs/MFUNET_logcosh/model.yaml")
 
     torch.manual_seed(1)
     random.seed(1)
@@ -46,11 +46,11 @@ def main(configpath, checkpoint=None):
 
     datamodel = SHMUDataModule(dsconf, modelconf.train_params)
 
-    model_mf = MFUNET(modelconf_mf).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/reg_mse_fix/sunny-bee-1-epoch=11-step=14148.ckpt", config=modelconf_mf)
+    model_mf = MFUNET(modelconf_mf).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/mfunet-logcosh/epoch=15-step=18864.ckpt", config=modelconf_mf)
     model = LUMIN(modelconf)
     model.mfunet_network.load_state_dict(model_mf.network.state_dict())
-    # for param in model.mfunet_network.parameters():
-    #     param.requires_grad = False
+    for param in model.mfunet_network.parameters():
+        param.requires_grad = False
     del model_mf
 
     # Callbacks

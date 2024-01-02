@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+import math
 
 from modelcomponents import RainNet as RN
 
@@ -36,6 +37,8 @@ class LUMIN(pl.LightningModule):
             self.criterion = RMSELoss()
         elif config.model.loss.name == "mse":
             self.criterion = nn.MSELoss()
+        elif config.model.loss.name == "logcosh":
+            self.criterion = LogCoshLoss()
         else:
             raise NotImplementedError(f"Loss {config.model.loss.name} not implemented!")
         
@@ -220,11 +223,11 @@ class LUMIN(pl.LightningModule):
     
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         # Get data
-        x, y, idx = batch
+        x, x_diff, y, _, first_x = batch
 
         # Perform prediction with LCNN model
         x_ = x.clone()
-        y_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
+        y_seq = self._iterative_prediction(batch=(x, x_diff, y, first_x), stage="predict")
 
         # Transform from scaled to mm/hh
         invScaler = self.trainer.datamodule.predict_dataset.invScaler
@@ -237,11 +240,13 @@ class LUMIN(pl.LightningModule):
             # but keep to match what is done to predictions
             first_x = invScaler(first_x)
             # Integrate observation back to full fields
-            x[:, 0, :, :] = first_x + x[:, 0, :, :]
+            temp = torch.permute(first_x, dims=(0, 3, 1, 2)) + x[:, 0, :, :]
+            x[:, 0, :, :] = temp
             for i in range(1, x.shape[1]):
                 x[:, i, :, :] = x[:, i, :, :] + x[:, i - 1, :, :]
             # First prediction with last observation
-            y_seq[:, 0, :, :] = y_seq[:, 0, :, :] + x[:, -1, :, :]
+            temp = y_seq[:, 0, :, :] + x[:, -1, 0, :, :]
+            y_seq[:, 0, :, :] = temp
             # Iterate through rest of predictions
             for i in range(1, self.predict_leadtimes):
                 y_seq[:, i, :, :] = y_seq[:, i - 1, :, :] + y_seq[:, i, :, :]
@@ -250,8 +255,8 @@ class LUMIN(pl.LightningModule):
             y_seq[y_seq < 0] = 0
         
         # Transform from mm/h to dBZ
-        output_fields = self.trainer.datamodule.predict_dataset.from_transformed(
-            output_fields, scaled=False
+        y_seq = self.trainer.datamodule.predict_dataset.from_transformed(
+            y_seq, scaled=False
         )
 
         del x
@@ -279,6 +284,23 @@ class RMSELoss(nn.Module):
         return torch.sqrt(self.mse(yhat, y) + self.eps)
 
 import torchvision.transforms.functional as TF
+
+def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+    
+    def _log_cosh(x: torch.Tensor) -> torch.Tensor:
+        return x + nn.functional.softplus(-2. * x) - math.log(2.0)
+    
+    return torch.mean(_log_cosh(y_pred - y_true))
+
+class LogCoshLoss(nn.Module):
+    
+    def __init__(self):
+        super().__init__()
+
+    def forward(
+        self, y_pred: torch.Tensor, y_true: torch.Tensor
+    ) -> torch.Tensor:
+        return log_cosh_loss(y_pred, y_true)
 
 class ConservationLawRegularizationLoss(nn.Module):
     def __init__(self, base_criterion, beta=0.5, gamma=0.5):
@@ -311,4 +333,4 @@ class ConservationLawRegularizationLoss(nn.Module):
         extra_criterion_loss_weighted = (1 - self.beta) * (self.gamma) * extra_criterion_loss
         physics_loss_weighted = (self.beta) * physics_loss
 
-        return criterion_loss_weighted + extra_criterion_loss_weighted + physics_loss_weighted, criterion_loss_weighted, extra_criterion_loss_weighted, physics_loss_weighted
+        return criterion_loss_weighted + extra_criterion_loss_weighted + physics_loss_weighted, criterion_loss, extra_criterion_loss, physics_loss
