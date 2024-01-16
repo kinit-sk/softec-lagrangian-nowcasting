@@ -318,15 +318,13 @@ class ConservationLawRegularizationLoss(nn.Module):
         device = final_output.device
         
         # physics-informed conservation of mass loss
-        diff_u = F.conv2d(motion_field[:,0:1], self.sobel_x.to(device))
-        diff_v = F.conv2d(motion_field[:,1:2], self.sobel_y.to(device))
-        physics_loss = torch.sum(torch.abs(diff_u + diff_v)) / (motion_field.shape[0] * motion_field.shape[2] * motion_field.shape[3])
-        
         if self.reflectivity_weighted:
             target_min = target.min()
             target_max = target.max()
             target_norm = (target - target_min)/(target_max - target_min)
-            physics_loss *= target_norm
+        diff_u = F.conv2d(motion_field[:,0:1], self.sobel_x.to(device))
+        diff_v = F.conv2d(motion_field[:,1:2], self.sobel_y.to(device))
+        physics_loss = torch.sum(torch.abs(diff_u + diff_v) * target_norm) / (motion_field.shape[0] * motion_field.shape[2] * motion_field.shape[3])
 
         if stage == "valid" or stage == "test":
             return criterion_loss, criterion_loss, extra_criterion_loss, physics_loss
