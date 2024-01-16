@@ -22,7 +22,6 @@ from pytorch_lightning.profilers import PyTorchProfiler
 from datamodules import SHMUDataModule
 
 from models import LUMIN
-from models import MFUNET
 
 import wandb
 import os
@@ -34,7 +33,7 @@ def main(configpath, checkpoint=None):
     outputconf = load_config(confpath / "output.yaml")
     modelconf = load_config(confpath / "model.yaml")
 
-    modelconf_mf = load_config("/data/softec-lagrangian-nowcasting/configs/LUMIN/model.yaml")
+    modelconf_foundation = load_config("/data/softec-lagrangian-nowcasting/configs/LUPIN_differenced/model.yaml")
 
     torch.manual_seed(1)
     random.seed(1)
@@ -46,7 +45,7 @@ def main(configpath, checkpoint=None):
 
     datamodel = SHMUDataModule(dsconf, modelconf.train_params)
 
-    model_base = LUMIN(modelconf_mf).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/LUMIN/epoch=14-step=70740.ckpt", config=modelconf_mf)
+    model_base = LUMIN(modelconf_foundation).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/LUMIN-differenced-pretrainedMFUNET-fixed2/epoch=17-step=21222.ckpt", config=modelconf_foundation)
     model = LUMIN(modelconf)
     model.mfunet_network.load_state_dict(model_base.mfunet_network.state_dict())
     model.advf_network.load_state_dict(model_base.advf_network.state_dict())
@@ -55,7 +54,7 @@ def main(configpath, checkpoint=None):
     # Callbacks
     model_ckpt = ModelCheckpoint(
         dirpath=f"checkpoints/{modelconf.train_params.savefile}",
-        save_top_k=3,
+        save_top_k=1,
         monitor="val_loss",
         save_on_train_epoch_end=False,
     )

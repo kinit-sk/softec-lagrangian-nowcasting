@@ -83,16 +83,19 @@ class LUMIN(pl.LightningModule):
         self.lr_sch_params = config.train_params.lr_scheduler
         self.automatic_optimization = False
 
-    def forward(self, x, x_diff):
+    def forward(self, x):
         # Fist stage - Motion-Field U-Net
         mf = self.mfunet_network(x)
-        extrapolated = self._extrapolate(1, x_diff[:,-1:], mf)
+        extrapolated = self._extrapolate(1, x[:,-1:], mf)
 
         # Second stage - Advection-free U-Net
-        x_lagrangian = x_diff.clone()
+        x_lagrangian = x.clone()
 
-        for i in range(x_diff.shape[1]):
+        for i in range(x.shape[1]):
             x_lagrangian[:,i] = self._extrapolate(x_lagrangian.shape[1]-i, x_lagrangian[:,[i]], mf)[:,-1]
+
+        if self.apply_differencing:
+            x_lagrangian = torch.diff(x_lagrangian, dim=1)
 
         result = self.advf_network(x_lagrangian)
 
@@ -179,13 +182,16 @@ class LUMIN(pl.LightningModule):
                 f"Stage {stage} is undefined. \n choices: 'train', 'valid', test', 'predict'"
             )
 
-        x, x_diff, y, _ = batch
+        x, y, _ = batch
         x = torch.squeeze(x, 2).float()
-        x_diff = torch.squeeze(x_diff, 2).float()
         y = torch.squeeze(y, 2).float()
         y_seq = torch.empty(
             (x.shape[0], n_leadtimes, *self.input_shape[1:]), device=self.device
         )
+        if stage == "predict" and self.apply_differencing:
+            y_seq_integrated = torch.empty(
+                (x.shape[0], n_leadtimes, *self.input_shape[1:]), device=self.device
+            )
         if calculate_loss:
             total_loss = 0
             if isinstance(self.criterion, ConservationLawRegularizationLoss):
@@ -194,9 +200,13 @@ class LUMIN(pl.LightningModule):
                 total_phys_loss = 0
 
         for i in range(n_leadtimes):
-            y_hat, y_extra, mf = self(x, x_diff)
+            y_hat, y_extra, mf = self(x)
             if calculate_loss:
                 y_i = y[:, None, i, :, :].clone()
+
+                if self.apply_differencing:
+                    y_i = torch.diff(torch.cat((y_extra, y_i), dim=1), dim=1)
+
                 if isinstance(self.criterion, RMSELoss):
                     loss = self.criterion(y_hat, y_i) * loss_weights[i] + self.criterion(y_hat, y_extra) * loss_weights[i]
                 elif isinstance(self.criterion, ConservationLawRegularizationLoss):
@@ -210,56 +220,41 @@ class LUMIN(pl.LightningModule):
                     self.manual_backward(loss)
                 del y_i
             y_seq[:, i, :, :] = y_hat.detach().squeeze()
+            if stage == "predict" and self.apply_differencing:
+                y_seq_integrated[:, i, :, :] = y_hat.detach().squeeze() + y_extra.detach().squeeze()
             if i != n_leadtimes - 1:
                 x = torch.roll(x, -1, dims=1)
+                if self.apply_differencing:
+                    y_hat = y_hat.detach().squeeze() + y_extra.detach().squeeze()
                 x[:, -1, :, :] = y_hat.detach().squeeze()
             del y_hat
         if calculate_loss and isinstance(self.criterion, RMSELoss):
             return y_seq, {"total_loss": total_loss}
         elif calculate_loss and isinstance(self.criterion, ConservationLawRegularizationLoss):
             return y_seq, {"total_loss": total_loss, "total_crit_loss": total_crit_loss, "total_extra_crit_loss": total_extra_crit_loss, "total_phys_loss": total_phys_loss}
+        elif stage == "predict" and self.apply_differencing:
+            return y_seq_integrated
         else:
             return y_seq
     
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         # Get data
-        x, x_diff, y, _, first_x = batch
+        x, y, _  = batch
 
         # Perform prediction with LCNN model
-        x_ = x.clone()
-        y_seq = self._iterative_prediction(batch=(x, x_diff, y, first_x), stage="predict")
+        y_seq = self._iterative_prediction(batch=(x, y, _), stage="predict")
 
         # Transform from scaled to mm/hh
         invScaler = self.trainer.datamodule.predict_dataset.invScaler
         y_seq = invScaler(y_seq)
-        x = invScaler(x_)
 
-        # If we applied differencing, integrate back to full fields
-        if self.apply_differencing:
-            # This should be a dummy transform that has no effect (since scaling should be "none"),
-            # but keep to match what is done to predictions
-            first_x = invScaler(first_x)
-            # Integrate observation back to full fields
-            temp = torch.permute(first_x, dims=(0, 3, 1, 2)) + x[:, 0, :, :]
-            x[:, 0, :, :] = temp
-            for i in range(1, x.shape[1]):
-                x[:, i, :, :] = x[:, i, :, :] + x[:, i - 1, :, :]
-            # First prediction with last observation
-            temp = y_seq[:, 0, :, :] + x[:, -1, 0, :, :]
-            y_seq[:, 0, :, :] = temp
-            # Iterate through rest of predictions
-            for i in range(1, self.predict_leadtimes):
-                y_seq[:, i, :, :] = y_seq[:, i - 1, :, :] + y_seq[:, i, :, :]
-
-            # Set negative values (in mm/h) to 0
-            y_seq[y_seq < 0] = 0
+        y_seq[y_seq < 0] = 0
         
         # Transform from mm/h to dBZ
         y_seq = self.trainer.datamodule.predict_dataset.from_transformed(
             y_seq, scaled=False
         )
 
-        del x
         return y_seq
 
 
@@ -303,7 +298,7 @@ class LogCoshLoss(nn.Module):
         return log_cosh_loss(y_pred, y_true)
 
 class ConservationLawRegularizationLoss(nn.Module):
-    def __init__(self, base_criterion, beta=0.5, gamma=0.5):
+    def __init__(self, base_criterion, beta=0.5, gamma=0.5, reflectivity_weighted=False):
         super(ConservationLawRegularizationLoss, self).__init__()
         self.sobel_x = torch.tensor([[-1.,  0.,  1.],
                                      [-2.,  0.,  2.],
@@ -313,6 +308,7 @@ class ConservationLawRegularizationLoss(nn.Module):
                                      [ 1.,  2.,  1.]]).view(1, 1, 3, 3).repeat(1, 1, 1, 1)
         self.beta = beta
         self.gamma = gamma
+        self.reflectivity_weighted = reflectivity_weighted
         self.criterion = base_criterion
 
     def forward(self, target, extrapolated, final_output, motion_field, stage):
@@ -325,6 +321,12 @@ class ConservationLawRegularizationLoss(nn.Module):
         diff_u = F.conv2d(motion_field[:,0:1], self.sobel_x.to(device))
         diff_v = F.conv2d(motion_field[:,1:2], self.sobel_y.to(device))
         physics_loss = torch.sum(torch.abs(diff_u + diff_v)) / (motion_field.shape[0] * motion_field.shape[2] * motion_field.shape[3])
+        
+        if self.reflectivity_weighted:
+            target_min = target.min()
+            target_max = target.max()
+            target_norm = (target - target_min)/(target_max - target_min)
+            physics_loss *= target_norm
 
         if stage == "valid" or stage == "test":
             return criterion_loss, criterion_loss, extra_criterion_loss, physics_loss

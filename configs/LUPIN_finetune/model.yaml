@@ -8,32 +8,33 @@ train_params:
   valid_batch_size: 12
   test_batch_size: 48
   predict_batch_size: 48
-  max_epochs: 100
+  max_epochs: 1
   # Max time used for training (days:hours:mins:secs)
   max_time: "00:48:00:00"
   # Validate after every n batches
   val_check_interval: 1.0
-  num_workers: 2
+  num_workers: 0
   gpus: 1
-  savefile: "LUPIN-finetune"
+  savefile: "LUPIN-finetune-differenced"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on
   val_batches: 9999999
   # number of baches to train on (per epoch)
-  train_batches: 1000
+  train_batches: 999999
   early_stopping:
     monitor: "val_loss"
-    patience: 3
+    patience: 2
   lr_scheduler:
     name: "reduce_lr_on_plateau"
     kwargs:
       mode: "min"
       factor: 0.9
-      patience: 0
+      patience: 1
 
 model:
-  lr: 0.000005
+  lr: 0.00005
+  apply_differencing: True
   mfunet:
     input_shape: [6, 336, 336]
     kernel_size: 3
@@ -51,12 +52,12 @@ model:
         ["9", [192, 64]],
       ]
   advfunet:
-    input_shape: [6, 336, 336]
+    input_shape: [5, 336, 336]
     kernel_size: 3
     mode: "regression"
     conv_shape:
       [
-        ["1", [6, 64]],
+        ["1", [5, 64]],
         ["2", [64, 128]],
         ["3", [128, 256]],
         ["4", [256, 512]],
@@ -68,21 +69,21 @@ model:
       ]
 
   loss:
-    name: "mse"
+    name: "logcosh"
     regularized: True
     kwargs:
-      beta: 0.001
+      beta: 0.1
       gamma: 0.0
+      reflectivity_weighted: True
     discount_rate: 0.0
   train_leadtimes: 6
-  display: 250
 prediction:
   predict_leadtimes: 6
 prediction_output:
   # Output directory
-  output_dir: /data/softec-lagrangian-nowcasting/outputs/LUPIN-finetune/
+  output_dir: /data/softec-lagrangian-nowcasting/outputs/LUPIN-finetune-differenced/
   # Output filename format (can contain {common_time} to change time)
-  filename: LUPIN-finetune.h5
+  filename: LUPIN-finetune-differenced-beta001.h5
   # where to save predictions in the HDF5 file
   group_format: "{common_time:%Y-%m-%d %H:%M:%S}/model"
   # Attributes of the dataset in the HDF5 file

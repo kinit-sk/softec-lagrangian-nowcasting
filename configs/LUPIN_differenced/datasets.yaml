@@ -28,5 +28,4 @@ SHMUDataset:
   # Upsampling method
   upsampling_method: average
   transform_to_grayscale: true
-  apply_differencing: True
   normalization_method: log

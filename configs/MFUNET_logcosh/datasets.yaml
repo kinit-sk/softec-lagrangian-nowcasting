@@ -31,5 +31,4 @@ SHMUDataset:
   min_val: -16.948421478271484
   max_val: 70
   transform_to_grayscale: true
-  apply_differencing: False
   normalization_method: log

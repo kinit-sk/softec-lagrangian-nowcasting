@@ -30,7 +30,6 @@ class SHMUDataset(Dataset):
         max_val=70.0,
         min_val=-16.948421478271484,
         transform_to_grayscale=True,
-        apply_differencing=False,
         predicting=False,
         normalization_method='none',
     ):
@@ -78,8 +77,6 @@ class SHMUDataset(Dataset):
             The maximum value to use when scaling the data between 0 and 1.
         min_val : float
             The minimum value to use when scaling the data between 0 and 1.
-        apply_differencing : bool
-            Whether to apply differencing to the data.
         """
         assert date_list is not None, "No date list for radar files provided!"
         assert path is not None, "No path to radar files provided!"
@@ -136,7 +133,6 @@ class SHMUDataset(Dataset):
         self.common_time_index = self.num_frames_input - 1
 
         self.transform_to_grayscale = transform_to_grayscale
-        self.apply_differencing = apply_differencing
 
         # If we're predicting now
         self.predicting = predicting
@@ -213,13 +209,9 @@ class SHMUDataset(Dataset):
 
         data = data[..., np.newaxis]
         
-        inputs_orig, inputs_diff, outputs, first_field = self.postprocessing(data)
+        inputs, outputs = self.postprocessing(data)
 
-        if self.apply_differencing and self.predicting:
-            # We want to return the first original field to allow transformation back to full fields
-            return inputs_orig, inputs_diff, outputs, idx, first_field
-
-        return inputs_orig, outputs, idx
+        return inputs, outputs, idx
 
     def to_grayscale(self, data):
         """Transform image from dBZ to grayscale (the 0-1 range)."""
@@ -249,23 +241,16 @@ class SHMUDataset(Dataset):
             # mm / h to log-transformed
             data = self.scaler(data)
 
-        first_field = None
-        if self.apply_differencing:
-            # Difference data
-            first_field = data[0, ...].clone()
-            data_diff = torch.diff(data, dim=0)
-
         # Divide to input & output
         # Use output frame number, since that is constant whether we apply differencing or not
         if self.num_frames_output == 0:
             inputs = data
             outputs = torch.empty((0, data.shape[1], data.shape[2]))
         else:
-            inputs_orig = data[: -self.num_frames_output, ...].permute(0, 3, 1, 2).contiguous()
-            inputs_diff = data_diff[: -self.num_frames_output, ...].permute(0, 3, 1, 2).contiguous() if self.apply_differencing else None
+            inputs = data[: -self.num_frames_output, ...].permute(0, 3, 1, 2).contiguous()
             outputs = data[-self.num_frames_output :, ...].permute(0, 3, 1, 2).contiguous()
 
-        return inputs_orig, inputs_diff, outputs, first_field
+        return inputs, outputs
 
     # def get_window(self, index):
     #     return self.windows[index, ...]
