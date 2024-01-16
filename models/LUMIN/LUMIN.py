@@ -324,7 +324,7 @@ class ConservationLawRegularizationLoss(nn.Module):
             target_norm = (target - target_min)/(target_max - target_min)
         diff_u = F.conv2d(motion_field[:,0:1], self.sobel_x.to(device))
         diff_v = F.conv2d(motion_field[:,1:2], self.sobel_y.to(device))
-        physics_loss = torch.sum(torch.abs(diff_u + diff_v) * TF.center_crop(target_norm, diff_u.size())) / (motion_field.shape[0] * motion_field.shape[2] * motion_field.shape[3])
+        physics_loss = torch.sum(torch.abs(diff_u + diff_v) * TF.center_crop(target_norm, diff_u.shape[-2:])) / (motion_field.shape[0] * motion_field.shape[2] * motion_field.shape[3])
 
         if stage == "valid" or stage == "test":
             return criterion_loss, criterion_loss, extra_criterion_loss, physics_loss
