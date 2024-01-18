@@ -298,14 +298,41 @@ class LogCoshLoss(nn.Module):
         return log_cosh_loss(y_pred, y_true)
 
 class ConservationLawRegularizationLoss(nn.Module):
-    def __init__(self, base_criterion, beta=0.5, gamma=0.5, reflectivity_weighted=False):
+    def __init__(self, base_criterion, beta=0.5, gamma=0.5, reflectivity_weighted=False, kernel_size=15, sigma=4):
         super(ConservationLawRegularizationLoss, self).__init__()
-        self.sobel_x = torch.tensor([[-1.,  0.,  1.],
-                                     [-2.,  0.,  2.],
-                                     [-1.,  0.,  1.]]).view(1, 1, 3, 3).repeat(1, 1, 1, 1)
-        self.sobel_y = torch.tensor([[-1., -2., -1.],
-                                     [ 0.,  0.,  0.],
-                                     [ 1.,  2.,  1.]]).view(1, 1, 3, 3).repeat(1, 1, 1, 1)
+
+        # Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)
+        x_cord = torch.arange(kernel_size)
+        x_grid = x_cord.repeat(kernel_size).view(kernel_size, kernel_size)
+        y_grid = x_grid.t()
+        xy_grid = torch.stack([x_grid, y_grid], dim=-1)
+
+        mean = (kernel_size - 1)/2.
+        variance = sigma**2.
+
+        # Calculate the 2-dimensional gaussian kernel which is
+        # the product of two gaussian distributions for two different
+        # variables (in this case called x and y)
+        gaussian_kernel = (1./(2.*math.pi*variance)) *\
+                        torch.exp(
+                            -torch.sum((xy_grid - mean)**2., dim=-1) /\
+                            (2*variance)
+                        )
+        # Make sure sum of values in gaussian kernel equals 1.
+        gaussian_kernel = gaussian_kernel / torch.sum(gaussian_kernel)
+
+
+        # Calculate the 2-dimensional gaussian kernel which is
+        # the product of two gaussian distributions for two different
+        # variables (in this case called x and y)
+        gaussian_kernel_1st = ((-(xy_grid - mean)/variance)*gaussian_kernel.view(kernel_size, kernel_size, 1).repeat(1, 1, 2))
+        # Make sure sum of values in gaussian kernel equals 1.
+        gaussian_kernel_1st = gaussian_kernel_1st / torch.sum(gaussian_kernel_1st)
+
+        gaussian_kernel_1st.requires_grad = False
+
+        self.kernel_x = gaussian_kernel_1st[:,:,0].view(1, 1, kernel_size, kernel_size)
+        self.kernel_y = gaussian_kernel_1st[:,:,1].view(1, 1, kernel_size, kernel_size)
         self.beta = beta
         self.gamma = gamma
         self.reflectivity_weighted = reflectivity_weighted
@@ -322,8 +349,8 @@ class ConservationLawRegularizationLoss(nn.Module):
             target_min = target.min()
             target_max = target.max()
             target_norm = (target - target_min)/(target_max - target_min)
-        diff_u = F.conv2d(motion_field[:,0:1], self.sobel_x.to(device))
-        diff_v = F.conv2d(motion_field[:,1:2], self.sobel_y.to(device))
+        diff_u = F.conv2d(motion_field[:,0:1], self.kernel_x.to(device))
+        diff_v = F.conv2d(motion_field[:,1:2], self.kernel_y.to(device))
         physics_loss = torch.sum(torch.abs(diff_u + diff_v) * TF.center_crop(target_norm, diff_u.shape[-2:])) / (motion_field.shape[0] * motion_field.shape[2] * motion_field.shape[3])
 
         if stage == "valid" or stage == "test":
