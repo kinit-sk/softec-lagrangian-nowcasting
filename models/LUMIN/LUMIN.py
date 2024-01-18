@@ -326,8 +326,6 @@ class ConservationLawRegularizationLoss(nn.Module):
         # the product of two gaussian distributions for two different
         # variables (in this case called x and y)
         gaussian_kernel_1st = ((-(xy_grid - mean)/variance)*gaussian_kernel.view(kernel_size, kernel_size, 1).repeat(1, 1, 2))
-        # Make sure sum of values in gaussian kernel equals 1.
-        gaussian_kernel_1st = gaussian_kernel_1st / torch.sum(gaussian_kernel_1st)
 
         gaussian_kernel_1st.requires_grad = False
 
