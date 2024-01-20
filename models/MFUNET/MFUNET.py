@@ -175,7 +175,7 @@ class MFUNET(pl.LightningModule):
                 if isinstance(self.criterion, RMSELoss):
                     loss = self.criterion(y_hat, y_i) * loss_weights[i]
                 elif isinstance(self.criterion, ConservationLawRegularizationLoss):
-                    loss, crit_loss, phys_loss = self.criterion(y_hat, y_i, mf, stage=stage)
+                    loss, crit_loss, phys_loss = self.criterion(x, y_i, mf, stage=stage)
                     loss, crit_loss, phys_loss = map(lambda l: torch.mul(l, loss_weights[i]), (loss, crit_loss, phys_loss))
                     total_crit_loss += crit_loss.detach()
                     total_phys_loss += phys_loss.detach()
@@ -245,10 +245,17 @@ class ConservationLawRegularizationLoss(nn.Module):
         self.beta = beta
         self.criterion = base_criterion
 
-    def forward(self, output, target, motion_field, stage):
-        criterion_loss = self.criterion(TF.center_crop(output, 336-48), TF.center_crop(target, 336-48))
+    def forward(self, input_obs, target, motion_field, stage):
+        if stage == "valid" or stage == "test":
+            criterion_loss = self.criterion(TF.center_crop(MFUNET._extrapolate(1, input_obs[:,-1:], motion_field), 336-48), TF.center_crop(target, 336-48))
+        else:
+            criterion_loss = 0
+            for i in range(input_obs.shape[1]-1):
+                extrapolated = MFUNET._extrapolate(1, input_obs[:,i:i+1], motion_field)
+                criterion_loss += self.criterion(TF.center_crop(extrapolated, 336-48), TF.center_crop(input_obs[:,i+1:i+2], 336-48))
+            criterion_loss += self.criterion(TF.center_crop(MFUNET._extrapolate(1, input_obs[:,-1:], motion_field), 336-48), TF.center_crop(target, 336-48))
 
-        device = output.device
+        device = input_obs.device
         
         # physics-informed conservation of mass loss
         diff_u = F.conv2d(motion_field[:,0:1], self.sobel_x.to(device))
@@ -258,7 +265,7 @@ class ConservationLawRegularizationLoss(nn.Module):
         if stage == "valid" or stage == "test":
             return criterion_loss, criterion_loss, physics_loss
 
-        return (1 - self.beta) * criterion_loss + (self.beta) * physics_loss, (1 - self.beta) * criterion_loss, (self.beta) * physics_loss
+        return (1 - self.beta) * criterion_loss + (self.beta) * physics_loss, criterion_loss, physics_loss
     
     
 def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
