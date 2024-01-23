@@ -117,15 +117,16 @@ class MFUNET(pl.LightningModule):
         self.log("test_loss", loss["total_loss"])
         return {"prediction": y_hat, "loss": loss["total_loss"]}
     
-    def _extrapolate(self, timesteps, precip, motion_field):
+    @staticmethod
+    def _extrapolate(timesteps, precip, motion_field):
         velocity = motion_field / (motion_field.shape[-1] / 2)
 
         x_values, y_values = torch.meshgrid(torch.arange(velocity.shape[-2]), torch.arange(velocity.shape[-1]))
-        xy_coords = torch.stack([y_values, x_values]).to(self.personal_device)
+        xy_coords = torch.stack([y_values, x_values]).to(precip.device)
         xy_coords = ((xy_coords) / ((velocity.shape[-1]) / 2) - 1)  # only works correctly for square input currently
 
-        precip_extrap = torch.zeros((precip.shape[0], timesteps, precip.shape[2], precip.shape[3])).to(self.personal_device)
-        displacement = torch.zeros((velocity.shape[0], 2, velocity.shape[2], velocity.shape[3])).to(self.personal_device)
+        precip_extrap = torch.zeros((precip.shape[0], timesteps, precip.shape[2], precip.shape[3])).to(precip.device)
+        displacement = torch.zeros((velocity.shape[0], 2, velocity.shape[2], velocity.shape[3])).to(precip.device)
         velocity_inc = velocity.clone()
 
         for ti in range(timesteps):
@@ -162,6 +163,9 @@ class MFUNET(pl.LightningModule):
         y_seq = torch.empty(
             (x.shape[0], n_leadtimes, *self.input_shape[1:]), device=self.device
         )
+        mf_seq = torch.empty(
+            (x.shape[0], n_leadtimes, 2, *self.input_shape[1:]), device=self.device
+        )
         if calculate_loss:
             total_loss = 0
             if isinstance(self.criterion, ConservationLawRegularizationLoss):
@@ -170,6 +174,7 @@ class MFUNET(pl.LightningModule):
 
         for i in range(n_leadtimes):
             y_hat, mf = self(x)
+            mf_seq[:, i] = mf
             if calculate_loss:
                 y_i = y[:, None, i, :, :].clone()
                 if isinstance(self.criterion, RMSELoss):
@@ -193,7 +198,7 @@ class MFUNET(pl.LightningModule):
         elif calculate_loss and isinstance(self.criterion, ConservationLawRegularizationLoss):
             return y_seq, {"total_loss": total_loss, "total_crit_loss": total_crit_loss, "total_phys_loss": total_phys_loss}
         else:
-            return y_seq
+            return y_seq, mf_seq
     
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         # Get data
@@ -201,14 +206,14 @@ class MFUNET(pl.LightningModule):
 
         # Perform prediction with LCNN model
         x_ = x.clone()
-        y_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
+        y_seq, mf_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
 
         y_seq = self.trainer.datamodule.predict_dataset.postprocessing(
             y_seq
         )
 
         del x
-        return y_seq
+        return y_seq, mf_seq
 
 
 

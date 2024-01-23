@@ -13,9 +13,9 @@ train_params:
   max_time: "00:48:00:00"
   # Validate after every n batches
   val_check_interval: 1.0
-  num_workers: 0
+  num_workers: 2
   gpus: 1
-  savefile: "LUMIN-differenced-pretrainedMFUNET-fixed2"
+  savefile: "LUMIN-differenced-pretrainedMFUNET-v2"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on
