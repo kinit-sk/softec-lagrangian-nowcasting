@@ -4,8 +4,8 @@
 train_params:
   device: cuda:0
   #device: cpu
-  train_batch_size: 12
-  valid_batch_size: 12
+  train_batch_size: 16
+  valid_batch_size: 16
   test_batch_size: 48
   predict_batch_size: 48
   max_epochs: 3
