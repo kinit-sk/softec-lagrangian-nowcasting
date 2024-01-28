@@ -46,7 +46,7 @@ def main(configpath, checkpoint=None):
 
     datamodel = SHMUDataModule(dsconf, modelconf.train_params)
 
-    model_mf = MFUNET(modelconf_mf).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/mfunet-logcosh/epoch=28-step=33013.ckpt", config=modelconf_mf)
+    model_mf = MFUNET(modelconf_mf).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/mfunet-logcosh/epoch=19-step=2960.ckpt", config=modelconf_mf)
     model = LUMIN(modelconf)
     model.mfunet_network.load_state_dict(model_mf.network.state_dict())
     for param in model.mfunet_network.parameters():

@@ -81,9 +81,9 @@ prediction:
   predict_leadtimes: 6
 prediction_output:
   # Output directory
-  output_dir: /data/softec-lagrangian-nowcasting/outputs/LUPIN-finetune-differenced-v2/
+  output_dir: /data/softec-lagrangian-nowcasting/outputs/LUPIN-diff-pretrain-2/
   # Output filename format (can contain {common_time} to change time)
-  filename: LUPIN-finetune-differenced-gauss_blur.h5
+  filename: LUPIN-diff-simpleMF.h5
   # where to save predictions in the HDF5 file
   group_format: "{common_time:%Y-%m-%d %H:%M:%S}/model"
   # Attributes of the dataset in the HDF5 file

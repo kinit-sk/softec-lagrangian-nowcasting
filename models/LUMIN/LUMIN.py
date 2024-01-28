@@ -85,7 +85,12 @@ class LUMIN(pl.LightningModule):
 
     def forward(self, x):
         # Fist stage - Motion-Field U-Net
-        mf = self.mfunet_network(x)
+        if self.trainer.datamodule.train_dataset.normalization == 'none':
+            x_pos = x.clone()
+            x_pos[x_pos <= 0] = 0
+            mf = self.mfunet_network(torch.log(x_pos + 0.01))
+        else:
+            mf = self.mfunet_network(x)
         extrapolated = self._extrapolate(1, x[:,-1:], TF.gaussian_blur(mf, 255, 127))
 
         # Second stage - Advection-free U-Net
@@ -246,11 +251,11 @@ class LUMIN(pl.LightningModule):
         x, y, _  = batch
 
         # Perform prediction with LCNN model
-        y_seq = self._iterative_prediction(batch=(x, y, _), stage="predict")
+        y_seq, mf_seq = self._iterative_prediction(batch=(x, y, _), stage="predict")
 
         # Transform from scaled to mm/hh
         invScaler = self.trainer.datamodule.predict_dataset.invScaler
-        y_seq, mf_seq = invScaler(y_seq)
+        y_seq = invScaler(y_seq)
 
         y_seq[y_seq < 0] = 0
         
@@ -259,7 +264,7 @@ class LUMIN(pl.LightningModule):
             y_seq, scaled=False
         )
 
-        return y_seq, mf_seq
+        return y_seq
 
 
 
