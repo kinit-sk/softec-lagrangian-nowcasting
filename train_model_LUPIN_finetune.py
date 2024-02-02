@@ -45,7 +45,7 @@ def main(configpath, checkpoint=None):
 
     datamodel = SHMUDataModule(dsconf, modelconf.train_params)
 
-    model_base = LUMIN(modelconf_foundation).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/LUMIN-differenced-pretrainedMFUNET-v2/epoch=9-step=11790.ckpt", config=modelconf_foundation)
+    model_base = LUMIN(modelconf_foundation).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/LUMIN-differenced-pretrainedMFUNET-rmse/epoch=6-step=7336.ckpt", config=modelconf_foundation)
     model = LUMIN(modelconf)
     model.mfunet_network.load_state_dict(model_base.mfunet_network.state_dict())
     model.advf_network.load_state_dict(model_base.advf_network.state_dict())

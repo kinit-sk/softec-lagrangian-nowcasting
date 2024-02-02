@@ -84,7 +84,7 @@ class LUMIN(pl.LightningModule):
         self.automatic_optimization = False
 
     def forward(self, x):
-        # Fist stage - Motion-Field U-Net
+        # First stage - Motion-Field U-Net
         if self.trainer.datamodule.train_dataset.normalization == 'none':
             x_pos = x.clone()
             x_pos[x_pos <= 0] = 0
@@ -148,15 +148,16 @@ class LUMIN(pl.LightningModule):
         self.log("test_loss", loss["total_loss"])
         return {"prediction": y_hat, "loss": loss["total_loss"]}
     
-    def _extrapolate(self, timesteps, precip, motion_field):
+    @staticmethod
+    def _extrapolate(timesteps, precip, motion_field):
         velocity = motion_field / (motion_field.shape[-1] / 2)
 
         x_values, y_values = torch.meshgrid(torch.arange(velocity.shape[-2]), torch.arange(velocity.shape[-1]))
-        xy_coords = torch.stack([y_values, x_values]).to(self.personal_device)
+        xy_coords = torch.stack([y_values, x_values]).to(precip.device)
         xy_coords = ((xy_coords) / ((velocity.shape[-1]) / 2) - 1)  # only works correctly for square input currently
 
-        precip_extrap = torch.zeros((precip.shape[0], timesteps, precip.shape[2], precip.shape[3])).to(self.personal_device)
-        displacement = torch.zeros((velocity.shape[0], 2, velocity.shape[2], velocity.shape[3])).to(self.personal_device)
+        precip_extrap = torch.zeros((precip.shape[0], timesteps, precip.shape[2], precip.shape[3])).to(precip.device)
+        displacement = torch.zeros((velocity.shape[0], 2, velocity.shape[2], velocity.shape[3])).to(precip.device)
         velocity_inc = velocity.clone()
 
         for ti in range(timesteps):
@@ -219,7 +220,7 @@ class LUMIN(pl.LightningModule):
                 if isinstance(self.criterion, RMSELoss):
                     loss = self.criterion(y_hat, y_i) * loss_weights[i] + self.criterion(y_hat, y_extra) * loss_weights[i]
                 elif isinstance(self.criterion, ConservationLawRegularizationLoss):
-                    loss, crit_loss, extra_crit_loss, phys_loss = self.criterion(y_hat, y_extra, y_i, mf, stage=stage)
+                    loss, crit_loss, extra_crit_loss, phys_loss = self.criterion(y_hat, x, y_i, mf, stage=stage)
                     loss, crit_loss, extra_crit_loss, phys_loss = map(lambda l: torch.mul(l, loss_weights[i]), (loss, crit_loss, extra_crit_loss, phys_loss))
                     total_crit_loss += crit_loss.detach()
                     total_extra_crit_loss += extra_crit_loss.detach()
@@ -321,9 +322,15 @@ class ConservationLawRegularizationLoss(nn.Module):
         self.reflectivity_weighted = reflectivity_weighted
         self.criterion = base_criterion
 
-    def forward(self, target, extrapolated, final_output, motion_field, stage):
+    def forward(self, target, input_obs, final_output, motion_field, stage):
         criterion_loss = self.criterion(TF.center_crop(final_output, 336-48), TF.center_crop(target, 336-48))
-        extra_criterion_loss = self.criterion(TF.center_crop(extrapolated, 336-48), TF.center_crop(target, 336-48))
+
+        extra_criterion_loss = 0
+        if self.gamma > 0 and stage == "train":
+            for i in range(input_obs.shape[1]-1):
+                extrapolated = LUMIN._extrapolate(1, input_obs[:,i:i+1], motion_field)
+                extra_criterion_loss += self.criterion(TF.center_crop(extrapolated, 336-48), TF.center_crop(input_obs[:,i+1:i+2], 336-48))
+            extra_criterion_loss += self.criterion(TF.center_crop(LUMIN._extrapolate(1, input_obs[:,-1:], motion_field), 336-48), TF.center_crop(target, 336-48))
 
         device = final_output.device
         
