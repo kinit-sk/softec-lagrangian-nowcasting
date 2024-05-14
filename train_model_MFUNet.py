@@ -76,13 +76,10 @@ def main(configpath, checkpoint=None):
             lr_monitor,
             device_monitor,
         ],
-        log_every_n_steps=5,
+        log_every_n_steps=3,
     )
 
     trainer.fit(model=model, datamodule=datamodel, ckpt_path=checkpoint)
-
-    torch.save(model.state_dict(), f"state_dict_{modelconf.train_params.savefile}.ckpt")
-    trainer.save_checkpoint(f"{modelconf.train_params.savefile}.ckpt")
 
 
 if __name__ == "__main__":

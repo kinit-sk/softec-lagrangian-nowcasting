@@ -14,3 +14,7 @@
 /wandb
 *.ckpt
 *.out
+/visualizations
+*.pdf
+*.gif
+*.mp4

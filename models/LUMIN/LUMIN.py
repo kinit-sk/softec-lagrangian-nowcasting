@@ -85,13 +85,13 @@ class LUMIN(pl.LightningModule):
 
     def forward(self, x):
         # First stage - Motion-Field U-Net
-        if self.trainer.datamodule.train_dataset.normalization == 'none':
+        if True:
             x_pos = x.clone()
             x_pos[x_pos <= 0] = 0
             mf = self.mfunet_network(torch.log(x_pos + 0.01))
         else:
             mf = self.mfunet_network(x)
-        extrapolated = self._extrapolate(1, x[:,-1:], TF.gaussian_blur(mf, 255, 127))
+        extrapolated = self._extrapolate(1, x[:,-1:], mf)
 
         # Second stage - Advection-free U-Net
         x_lagrangian = x.clone()

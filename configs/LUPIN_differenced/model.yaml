@@ -15,7 +15,7 @@ train_params:
   val_check_interval: 1.0
   num_workers: 0
   gpus: 1
-  savefile: "LUMIN-differenced-pretrainedMFUNET-rmse"
+  savefile: "LUPIN-april"
   # many leadtimes
   verif_leadtimes: 6
   # number of batches to validate on

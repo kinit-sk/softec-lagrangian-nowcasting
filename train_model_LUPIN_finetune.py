@@ -45,7 +45,7 @@ def main(configpath, checkpoint=None):
 
     datamodel = SHMUDataModule(dsconf, modelconf.train_params)
 
-    model_base = LUMIN(modelconf_foundation).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/LUMIN-differenced-pretrainedMFUNET-rmse/epoch=6-step=7336.ckpt", config=modelconf_foundation)
+    model_base = LUMIN(modelconf_foundation).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/LUPIN-april/epoch=10-step=11528.ckpt", config=modelconf_foundation)
     model = LUMIN(modelconf)
     model.mfunet_network.load_state_dict(model_base.mfunet_network.state_dict())
     model.advf_network.load_state_dict(model_base.advf_network.state_dict())
@@ -82,13 +82,10 @@ def main(configpath, checkpoint=None):
             lr_monitor,
             device_monitor,
         ],
-        log_every_n_steps=5,
+        log_every_n_steps=1,
     )
 
     trainer.fit(model=model, datamodule=datamodel, ckpt_path=checkpoint)
-
-    torch.save(model.state_dict(), f"state_dict_{modelconf.train_params.savefile}.ckpt")
-    trainer.save_checkpoint(f"{modelconf.train_params.savefile}.ckpt")
 
 
 if __name__ == "__main__":

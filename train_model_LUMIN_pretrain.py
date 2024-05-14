@@ -34,7 +34,7 @@ def main(configpath, checkpoint=None):
     outputconf = load_config(confpath / "output.yaml")
     modelconf = load_config(confpath / "model.yaml")
 
-    modelconf_mf = load_config("/data/softec-lagrangian-nowcasting/configs/MFUNET_logcosh/model.yaml")
+    modelconf_mf = load_config("/data/softec-lagrangian-nowcasting/configs/MFUNET_rmse/model.yaml")
 
     torch.manual_seed(1)
     random.seed(1)
@@ -46,7 +46,7 @@ def main(configpath, checkpoint=None):
 
     datamodel = SHMUDataModule(dsconf, modelconf.train_params)
 
-    model_mf = MFUNET(modelconf_mf).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/mfunet-logcosh/epoch=19-step=2960.ckpt", config=modelconf_mf)
+    model_mf = MFUNET(modelconf_mf).load_from_checkpoint("/data/softec-lagrangian-nowcasting/checkpoints/mfunet-rmse/epoch=6-step=2065.ckpt", config=modelconf_mf)
     model = LUMIN(modelconf)
     model.mfunet_network.load_state_dict(model_mf.network.state_dict())
     for param in model.mfunet_network.parameters():
@@ -56,7 +56,7 @@ def main(configpath, checkpoint=None):
     # Callbacks
     model_ckpt = ModelCheckpoint(
         dirpath=f"checkpoints/{modelconf.train_params.savefile}",
-        save_top_k=3,
+        save_top_k=1,
         monitor="val_loss",
         save_on_train_epoch_end=False,
     )
@@ -84,7 +84,7 @@ def main(configpath, checkpoint=None):
             lr_monitor,
             device_monitor,
         ],
-        log_every_n_steps=5,
+        log_every_n_steps=1,
     )
 
     trainer.fit(model=model, datamodule=datamodel, ckpt_path=checkpoint)

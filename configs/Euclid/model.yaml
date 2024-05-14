@@ -1,0 +1,22 @@
+train_params:
+  device: cuda:0
+  test_batch_size: 8
+  predict_batch_size: 8
+  num_workers: 0
+  gpus: 1
+prediction:
+  predict_leadtimes: 6
+prediction_output:
+  # Output directory
+  output_dir: /data/softec-lagrangian-nowcasting/outputs/Euclid/
+  # Output filename format (can contain {common_time} to change time)
+  filename: Euclid.h5
+  # where to save predictions in the HDF5 file
+  group_format: "{common_time:%Y-%m-%d %H:%M:%S}/model"
+  # Attributes of the dataset in the HDF5 file
+  what_attrs:
+    quantity: DBZH
+    gain: 0.5
+    offset: -32
+    nodata: 255
+    undetect: 0
