@@ -27,8 +27,12 @@ import wandb
 import os
 
 
+wandb.init(
+        project="rainnet",
+)
+
 def main(configpath, checkpoint=None):
-    confpath = Path("config") / configpath
+    confpath = Path("configs") / configpath 
     dsconf = load_config(confpath / "datasets.yaml")
     outputconf = load_config(confpath / "output.yaml")
     modelconf = load_config(confpath / "model.yaml")

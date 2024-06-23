@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
+import torchvision.transforms.functional as TF
+
 
 from modelcomponents import RainNet as RN
 
@@ -29,6 +31,8 @@ class RainNet(pl.LightningModule):
             self.criterion = RMSELoss()
         elif config.model.loss.name == "mse":
             self.criterion = nn.MSELoss()
+        elif config.model.loss.name == "wloss":
+            self.criterion = WeightedLoss()
         else:
             raise NotImplementedError(f"Loss {config.model.loss.name} not implemented!")
         
@@ -163,8 +167,15 @@ class RainNet(pl.LightningModule):
         x_ = x.clone()
         y_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
 
-        y_seq = self.trainer.datamodule.predict_dataset.postprocessing(
-            y_seq
+         # Transform from scaled to mm/hh
+        invScaler = self.trainer.datamodule.predict_dataset.invScaler
+        y_seq = invScaler(y_seq)
+
+        y_seq[y_seq < 0] = 0
+        
+        # Transform from mm/h to dBZ
+        y_seq = self.trainer.datamodule.predict_dataset.from_transformed(
+            y_seq, scaled=False
         )
 
         del x
@@ -190,4 +201,23 @@ class RMSELoss(nn.Module):
     def forward(self, yhat, y):
         """Forward pass."""
         return torch.sqrt(self.mse(yhat, y) + self.eps)
+    
+class WeightedLoss(nn.Module):
+
+    def __init__(self, min_value=0.09141536261538462, max_value=0.8849892864070107):
+        super().__init__()
+        self.mse = nn.MSELoss()
+        self.min_value = min_value
+        self.max_value = max_value
+
+    
+    def forward(self, pred, target):
+        pred_cropped = TF.center_crop(pred,  336-48)
+        target_cropped = TF.center_crop(target, 336-48)
+        weight = torch.clamp(target_cropped, min=self.min_value, max=self.max_value)
+        difference = torch.abs(pred_cropped - target_cropped)        
+        loss = difference * weight
+        return loss.mean()
+
+
     

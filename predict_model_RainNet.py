@@ -25,7 +25,7 @@ def run(checkpointpath, configpath, predict_list) -> None:
         dsconf, modelconf.train_params, predict_list=predict_list
     )
 
-    model = RainNet(modelconf).load_from_checkpoint(checkpointpath, config=modelconf, map_location=torch.device('cpu'))
+    model = RainNet.load_from_checkpoint(checkpointpath, config=modelconf, map_location=torch.device('cpu'))
     model.eval()
 
     output_writer = LagrangianHDF5Writer(**modelconf.prediction_output)

@@ -1,11 +1,11 @@
 SHMUDataset:
   # Absolute path to the list containing dates used for training, validation and testing
   # The path can contain {split} that is replaced with train/test/valid
-  date_list: "/data/maly_javornik_CMAX_60k_2/maly_javornik_new_sampling/metadata_lcnn_{split}.h5"
+  date_list: "/data/softec-lagrangian-nowcasting/maly_javornik_CMAX_60k_2/maly_javornik_new_sampling/metadata_lcnn_{split}.h5"
   # path and filename can contain the following tokens:
   # {year:*}, {month:*}, {day:*}, {hour:*}, {minute:*}, {second:*}
   # Path to archive
-  path: "/data/maly_javornik_CMAX_60k_2/maly_javornik_new_sampling"
+  path: "/data/softec-lagrangian-nowcasting/maly_javornik_CMAX_60k_2/maly_javornik_new_sampling"
   # Filename format
   filename: "{year}{month:02d}{day:02d}{hour:02d}{minute:02d}.h5"
   # Importer used to load composites, options: h5
@@ -31,3 +31,7 @@ SHMUDataset:
   min_val: -16.948421478271484
   max_val: 70
   transform_to_grayscale: true
+  augmentations:
+    horizontal_flip: True
+    vertical_flip: True
+    rotations: True
