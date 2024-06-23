@@ -32,6 +32,7 @@ class SHMUDataset(Dataset):
         transform_to_grayscale=True,
         predicting=False,
         normalization_method='none',
+        augmentations=None, ## added this
     ):
         """Initialize the dataset.
 
