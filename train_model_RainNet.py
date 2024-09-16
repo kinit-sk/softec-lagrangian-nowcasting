@@ -85,9 +85,6 @@ def main(configpath, checkpoint=None):
 
     trainer.fit(model=model, datamodule=datamodel, ckpt_path=checkpoint)
 
-    torch.save(model.state_dict(), f"state_dict_{modelconf.train_params.savefile}.ckpt")
-    trainer.save_checkpoint(f"{modelconf.train_params.savefile}.ckpt")
-
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(
