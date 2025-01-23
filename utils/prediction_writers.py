@@ -82,12 +82,12 @@ class LagrangianHDF5Writer(BasePredictionWriter):
                     group_name = self.group_format.format(common_time=common_time)
                     group = f.require_group(group_name)
 
-                    for i in range(prediction.shape[1]):
+                    for i in range(prediction[0].shape[1]):
                         date = common_time + timedelta(
                             minutes=(i + 1)
                             * trainer.datamodule.predict_dataset.timestep
                         )
-                        dname = f"{i + 1}"
+                        dname = f"nc_{i + 1}"
                         ds_group = group.require_group(dname)
 
                         what_attrs = self.what_attrs.copy()
@@ -96,7 +96,7 @@ class LagrangianHDF5Writer(BasePredictionWriter):
                         )
 
                         packed = arr_compress_uint8(
-                            prediction[bi, i, ...].detach().cpu().numpy(),
+                            prediction[0][bi, i, ...].detach().cpu().numpy(),
                             nodata_val=what_attrs["nodata"],
                             undetect_val=what_attrs["undetect"],
                             filter_dbz=self.filter_dbz,

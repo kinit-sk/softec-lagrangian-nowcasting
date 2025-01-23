@@ -7,7 +7,7 @@ train_params:
   train_batch_size: 128
   valid_batch_size: 128
   test_batch_size: 128
-  predict_batch_size: 128
+  predict_batch_size: 64
   max_epochs: 99
   # Max time used for training (days:hours:mins:secs)
   max_time: "00:48:00:00"
@@ -65,9 +65,9 @@ prediction_output:
   # Output directory
   output_dir: /data/softec-lagrangian-nowcasting/outputs/mfunet_rmse/
   # Output filename format (can contain {common_time} to change time)
-  filename: mfunet_rmse_beta0.h5
+  filename: mfunet_rmse.h5
   # where to save predictions in the HDF5 file
-  group_format: "{common_time:%Y-%m-%d %H:%M:%S}/model"
+  group_format: "{common_time:%Y-%m-%d %H:%M:%S}/mfunet"
   # Attributes of the dataset in the HDF5 file
   what_attrs:
     quantity: DBZH

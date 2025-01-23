@@ -17,7 +17,7 @@ def run(checkpointpath, configpath, predict_list) -> None:
     confpath = Path("config") / configpath
     dsconf = load_config(confpath / "datasets.yaml")
     outputconf = load_config(confpath / "output.yaml")
-    modelconf = load_config(confpath / "MFUNET.yaml")
+    modelconf = load_config(confpath / "model.yaml")
 
     setup_logging(outputconf.logging)
 
@@ -38,7 +38,7 @@ def run(checkpointpath, configpath, predict_list) -> None:
     )
 
     # Predictions are written in HDF5 file
-    trainer.predict(model, datamodel, return_predictions=False)
+    trainer.test(model, datamodel)
 
 
 if __name__ == "__main__":

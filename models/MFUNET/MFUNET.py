@@ -113,9 +113,30 @@ class MFUNET(pl.LightningModule):
             sch.step(self.trainer.callback_metrics["val_loss"])
 
     def test_step(self, batch, batch_idx):
-        y_hat, loss = self._iterative_prediction(batch=batch, stage="test")
-        self.log("test_loss", loss["total_loss"])
-        return {"prediction": y_hat, "loss": loss["total_loss"]}
+        # Get data
+        x, y, idx = batch
+
+        y_seq, mf_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
+
+        with torch.no_grad():
+            for lead_idx in range(self.predict_leadtimes):
+                sobel_x = torch.tensor([[-1.,  0.,  1.],
+                                        [-2.,  0.,  2.],
+                                        [-1.,  0.,  1.]]).view(1, 1, 3, 3).to(mf_seq.device)
+                sobel_y = torch.tensor([[-1., -2., -1.],
+                                        [ 0.,  0.,  0.],
+                                        [ 1.,  2.,  1.]]).view(1, 1, 3, 3).to(mf_seq.device)
+                diff_u = F.conv2d(mf_seq[:,lead_idx,0:1], sobel_x)
+                diff_v = F.conv2d(mf_seq[:,lead_idx,1:2], sobel_y)
+                divergence = torch.sum(torch.abs(diff_u + diff_v)) / (mf_seq.shape[0] * mf_seq.shape[-2] * mf_seq.shape[-1])
+
+                mse = nn.functional.mse_loss(y_seq[:,lead_idx,45:291,45:291], y[:,lead_idx,0,45:291,45:291])
+                mae = nn.functional.l1_loss(y_seq[:,lead_idx,45:291,45:291], y[:,lead_idx,0,45:291,45:291])
+
+                self.log_dict({f"divergence_{lead_idx}": divergence, f"mse_{lead_idx}": mse, f"mae_{lead_idx}": mae})
+
+        del x
+        return y_seq, mf_seq
     
     @staticmethod
     def _extrapolate(timesteps, precip, motion_field):
@@ -204,12 +225,11 @@ class MFUNET(pl.LightningModule):
         # Get data
         x, y, idx = batch
 
-        # Perform prediction with LCNN model
-        x_ = x.clone()
         y_seq, mf_seq = self._iterative_prediction(batch=(x, y, idx), stage="predict")
 
-        y_seq = self.trainer.datamodule.predict_dataset.postprocessing(
-            y_seq
+        # Transform from mm/h to dBZ
+        y_seq = self.trainer.datamodule.predict_dataset.from_transformed(
+            y_seq, scaled=False
         )
 
         del x
